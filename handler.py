@@ -9,16 +9,16 @@ import protocol
 import transports
 
 handler_types = {
-    'websocket'  : transports.WebSocketTransport,
+    'websocket'  : ('bi', transports.WebSocketTransport),
 
-    'xhr'        : transports.XHRPollingTransport,
-    'xhr_send'   : transports.XHRPollingTransport,
+    'xhr'        : ('recv', transports.XHRPollingTransport),
+    'xhr_send'   : ('send', transports.XHRPollingTransport),
 
-    'jsonp'      : transports.JSONPolling,
-    'jsonp_send' : transports.JSONPolling,
+    'jsonp'      : ('recv', transports.JSONPolling),
+    'jsonp_send' : ('send', transports.JSONPolling),
 
-    'htmlfile'   : transports.HTMLFileTransport,
-    'iframe'     : transports.IFrameTransport,
+    'htmlfile'   : ('recv', transports.HTMLFileTransport),
+    'iframe'     : ('recv', transports.IFrameTransport),
 }
 
 class SockJSHandler(WSGIHandler):
@@ -82,8 +82,7 @@ class SockJSHandler(WSGIHandler):
         self.write_text('Welcome to SockJS!\n')
 
     def do404(self):
-        self.start_response('404 NOT FOUND', [])
-        return ['404 Error: Page not found']
+        return super(SockJSHandler, self).handle_one_response()
 
     def enable_caching(self):
         d = datetime.datetime.now() + datetime.timedelta(days=365)
@@ -161,40 +160,58 @@ class SockJSHandler(WSGIHandler):
             # A completely invalid url
             else:
                # 404
-               return super(SockJSHandler, self).handle_one_response()
+               return self.do404()
+
+        # Lookup the direction of the transport and its
+        # associated handler
+        direction, _ = handler_types.get(transport, (False,False))
 
         # Is it even a valid url?
         if not url_tokens:
-            return super(SockJSHandler, self).handle_one_response()
+            return self.do404()
 
+        # Did we get a session identifier in the url?
         if session_uid:
+
             # Ensure the session identifier is actually alphanumeric
             if self.SESSION_RE.match(session_uid):
-                session = self.server.get_session(session_uid)
+                # If the user tries to poll on a recv url, then
+                # let them create a session if it doesn't yet
+                # exist.
+                create_if_null = direction == 'bi' or direction == 'recv'
+
+                session = self.server.get_session(session_uid, \
+                    create_if_null)
+
+                # Otherwise 404 them since they're trying to poll
+                # on a non-existent session.
+                if not session:
+                    return self.do404()
+
             else:
-                return super(SockJSHandler, self).handle_one_response()
+                return self.do404()
+
         else:
             # not a session, greeting, or iframe so 404
-            return super(SockJSHandler, self).handle_one_response()
+            return self.do404()
 
         # Websockets are a special case... since we need to
-        # context switch over to a new Handler
+        # context switch over to the WebSocketHandler
         if transport == 'websocket':
             self.__class__ = WebSocketHandler
             self.handle_one_response()
 
         # Do we have a transport?
         if transport:
-            transport_cls = handler_types.get(transport, False)
+            direction, transport_cls = handler_types.get(transport, (False,False))
         else:
-            return super(SockJSHandler, self).handle_one_response()
+            return self.do404()
 
         # Do we have a handler for that transport?
         if transport_cls:
             self.transport = transport_cls(self)
         else:
-            return super(SockJSHandler, self).handle_one_response()
+            return self.do404()
 
         async_calls = self.transport.connect(session, request_method, transport)
         gevent.joinall(async_calls)
-
