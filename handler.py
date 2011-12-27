@@ -44,7 +44,6 @@ class SockJSHandler(WSGIHandler):
     SESSION_RE = re.compile(r"^((?!\.).)*$")
 
     def __init__(self, *args, **kwargs):
-        self.socketio_connection = False
         super(SockJSHandler, self).__init__(*args, **kwargs)
 
     # Raw write actions
@@ -82,6 +81,9 @@ class SockJSHandler(WSGIHandler):
         self.write_text('Welcome to SockJS!\n')
 
     def do404(self):
+        """
+        Let the vanilla WSGIHandler deal with the 404.
+        """
         return super(SockJSHandler, self).handle_one_response()
 
     def enable_caching(self):
@@ -97,6 +99,7 @@ class SockJSHandler(WSGIHandler):
     def serve_iframe(self):
         cached = self.environ.get('HTTP_IF_NONE_MATCH')
 
+        # TODO: check this is equal to our MD5
         if cached:
             self.start_response("304 NOT MODIFIED", self.headers)
             self.write(None)
@@ -111,6 +114,7 @@ class SockJSHandler(WSGIHandler):
 
         self.start_response("200 OK", self.headers)
 
+        # TODO: actually put this in here
         html = protocol.IFRAME_HTML % ('http',)
 
         if 'Content-Length' not in self.response_headers_list:
