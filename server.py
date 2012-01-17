@@ -2,21 +2,18 @@ from weakref import WeakValueDictionary
 from gevent.pywsgi import WSGIServer
 
 import session
-import handler
+from handler import SockJSHandler
 
 class SockJSServer(WSGIServer):
 
     session_backend = session.MemorySession
+    handler_class = SockJSHandler
 
     def __init__(self, *args, **kwargs):
 
         # Use weakrefs so that we don't not GC sessions purely
         # from their references in this session container
         self.sessions = WeakValueDictionary()
-
-        self.namespace = kwargs.pop('namespace')
-
-        kwargs['handler_class'] = handler.SockJSHandler
 
         super(SockJSServer, self).__init__(*args, **kwargs)
 
@@ -61,11 +58,9 @@ class Application(object):
         self.buffer = []
 
     def __call__(self, environ, start_response):
-        #path = environ['PATH_INFO'].strip('/')
-
         start_response('404 NOT FOUND', [])
         return ['404 Error: Page not found']
 
 if __name__ == '__main__':
     print 'Listening on port 8080'
-    SockJSServer(('', 8081), Application(), namespace="socket.io").serve_forever()
+    SockJSServer(('', 8081), Application()).serve_forever()

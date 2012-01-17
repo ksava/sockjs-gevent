@@ -161,10 +161,10 @@ class SockJSHandler(WSGIHandler):
                return self.greeting()
             elif self.IFRAME_RE.match(path):
                 self.serve_iframe()
+
             # A completely invalid url
             else:
-               # 404
-               return self.do404()
+                return self.do404()
 
         # Lookup the direction of the transport and its
         # associated handler
