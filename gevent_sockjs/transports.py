@@ -8,6 +8,7 @@ def enum(*sequential, **named):
 
 FRAMES = enum( 'CLOSE', 'OPEN', 'MESSAGE', 'HEARTBEAT' )
 
+
 class BaseTransport(object):
 
     def __init__(self, handler):
@@ -41,6 +42,7 @@ class BaseTransport(object):
 
     def start_response(self, *args, **kwargs):
         self.handler.start_response(*args, **kwargs)
+
 
 class PollingTransport(BaseTransport):
     """
@@ -163,11 +165,14 @@ class XHRPollingTransport(PollingTransport):
 class JSONPolling(PollingTransport):
     pass
 
+
 class HTMLFileTransport(BaseTransport):
     pass
 
+
 class IFrameTransport(BaseTransport):
     pass
+
 
 class WebSocketTransport(BaseTransport):
 

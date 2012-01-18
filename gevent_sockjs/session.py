@@ -5,6 +5,7 @@ import gevent
 from gevent.queue import Queue
 from gevent.event import Event
 
+
 class Session(object):
     """
     Base class for Session objects. Provides for different
@@ -56,6 +57,7 @@ class Session(object):
     def kill(self):
         raise NotImplemented()
 
+
 class MemorySession(Session):
     """
     In memory session with a outgoing gevent Queue as the message
@@ -103,6 +105,6 @@ class MemorySession(Session):
         else:
             pass
 
+
 #class RedisSession(Session):
     #pass
-

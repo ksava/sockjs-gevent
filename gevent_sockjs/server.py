@@ -4,6 +4,7 @@ from gevent.pywsgi import WSGIServer
 import session
 from handler import SockJSHandler
 
+
 class SockJSServer(WSGIServer):
 
     session_backend = session.MemorySession
@@ -51,6 +52,7 @@ class SockJSServer(WSGIServer):
 
         return session
 
+
 class Application(object):
     urls = {}
 
@@ -61,6 +63,11 @@ class Application(object):
         start_response('404 NOT FOUND', [])
         return ['404 Error: Page not found']
 
+
+def main(port=8080):
+    SockJSServer(('', port), Application()).serve_forever()
+
+
 if __name__ == '__main__':
     print 'Listening on port 8080'
-    SockJSServer(('', 8081), Application()).serve_forever()
+    main()
