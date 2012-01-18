@@ -158,7 +158,7 @@ class SockJSHandler(WSGIHandler):
             transport = None
 
             if self.GREETING_RE.match(path):
-               return self.greeting()
+                return self.greeting()
             elif self.IFRAME_RE.match(path):
                 self.serve_iframe()
 

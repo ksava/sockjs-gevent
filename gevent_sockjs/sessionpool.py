@@ -4,6 +4,7 @@ import gevent
 from heapq import heappush, heappop
 from datetime import datetime, timedelta
 
+
 class BaseSession(object):
     """
     A generic session, extend this or roll your own.
@@ -51,6 +52,7 @@ class BaseSession(object):
 
     def post_delete(self):
         pass
+
 
 class SessionPool(object):
     """
