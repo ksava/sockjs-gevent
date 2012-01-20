@@ -219,7 +219,8 @@ class SockJSHandler(WSGIHandler):
         self.transport = transport_cls(self)
 
         async_calls = self.transport.connect(session, request_method, transport)
-        gevent.joinall(async_calls)
+        if async_calls:
+            gevent.joinall(async_calls)
 
 
 class SockJSWebSocketHandler(WebSocketHandler):

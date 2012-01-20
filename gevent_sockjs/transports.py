@@ -22,9 +22,6 @@ class BaseTransport(object):
     def decode(self, data):
         return protocol.decode(data)
 
-    def write_frame(self, frame, data):
-        raise NotImplemented()
-
     def write(self, data):
         if data is None:
             length = 0
@@ -68,8 +65,6 @@ class PollingTransport(BaseTransport):
         ])
         self.write('')
 
-        return []
-
     def get(self, session, action):
         """
         Spin lock the thread until we have a message on the
@@ -87,9 +82,7 @@ class PollingTransport(BaseTransport):
             self.content_type,
         ])
 
-        self.write_frame(FRAMES.MESSAGE, messages)
-
-        return []
+        self.write(protocol.message_frame(messages))
 
     def post(self, session, action):
         if action == 'xhr_send':
@@ -104,11 +97,8 @@ class PollingTransport(BaseTransport):
             self.start_response("204 NO CONTENT", [])
             self.write(None)
 
-            return []
-
         elif action == 'xhr':
             self.get(session, action)
-            return []
 
     def connect(self, session, request_method, action):
         """
@@ -117,13 +107,13 @@ class PollingTransport(BaseTransport):
         request method, and action.
         """
         if session.is_new():
+            #self.write(protocol.OPEN)
             self.handler.write_text(protocol.OPEN)
-            return []
+            return
 
         if request_method == "GET":
             session.clear_disconnect_timeout();
             self.get(session, action)
-            return []
 
         elif request_method == "POST":
             return self.post(session, action)
@@ -136,23 +126,7 @@ class PollingTransport(BaseTransport):
 
 
 class XHRPollingTransport(PollingTransport):
-
-    def write_frame(self, frame, data=None):
-        if frame == FRAMES.OPEN:
-            self.write(protocol.OPEN)
-
-        elif frame == FRAMES.CLOSE:
-            self.write(protocol.CLOSE)
-
-        elif frame == FRAMES.HEARTBEAT:
-            self.write(protocol.HEARTBEAT)
-
-        elif frame == FRAMES.MESSAGE:
-            assert isinstance(data, basestring)
-            assert '[' in data
-            assert ']' in data
-
-            self.write(''.join([protocol.MESSAGE, data,'\n']))
+    pass
 
 
 class JSONPolling(PollingTransport):
@@ -168,23 +142,6 @@ class IFrameTransport(BaseTransport):
 
 
 class WebSocketTransport(BaseTransport):
-
-    def write_frame(self, frame, data=None):
-        if frame == FRAMES.OPEN:
-            self.write(protocol.OPEN)
-
-        elif frame == FRAMES.CLOSE:
-            self.write(protocol.CLOSE)
-
-        elif frame == FRAMES.HEARTBEAT:
-            self.write(protocol.HEARTBEAT)
-
-        elif frame == FRAMES.MESSAGE:
-            assert isinstance(data, basestring)
-            assert '[' in data
-            assert ']' in data
-
-            self.write(''.join([protocol.MESSAGE, data,'\n']))
 
     def connect(self, session, request_method, action):
         session.incr_hits()
@@ -203,7 +160,7 @@ class WebSocketTransport(BaseTransport):
                 #    session.kill()
                 #    break
 
-                websocket.send(''.join([protocol.MESSAGE, messages, '\n']))
+                websocket.send(protocol.message_frame(messages))
 
         gr1 = gevent.spawn(send)
 

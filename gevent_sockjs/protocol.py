@@ -100,3 +100,11 @@ def decode(data):
 
 def close_frame(code, reason):
     return '%s[%d,"%s"]' % (CLOSE, code, reason)
+
+
+def message_frame(data):
+    assert isinstance(data, basestring)
+    assert '[' in data
+    assert ']' in data
+
+    return ''.join([MESSAGE, data, '\n'])
