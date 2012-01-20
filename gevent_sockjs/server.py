@@ -1,8 +1,8 @@
 from weakref import WeakValueDictionary
 from gevent.pywsgi import WSGIServer
 
-import session
-from handler import SockJSHandler
+from gevent_sockjs import session
+from gevent_sockjs.handler import SockJSHandler
 
 
 class SockJSServer(WSGIServer):
@@ -11,22 +11,15 @@ class SockJSServer(WSGIServer):
     handler_class = SockJSHandler
 
     def __init__(self, *args, **kwargs):
+        super(SockJSServer, self).__init__(*args, **kwargs)
 
         # Use weakrefs so that we don't not GC sessions purely
         # from their references in this session container
         self.sessions = WeakValueDictionary()
 
-        super(SockJSServer, self).__init__(*args, **kwargs)
-
-    def start_accepting(self):
-        super(SockJSServer, self).start_accepting()
-
-    def kill(self):
-        super(SockJSServer, self).kill()
-
-    def handle(self, socket, address):
-        handler = self.handler_class(socket, address, self)
-        handler.handle()
+        self.namespace = kwargs.get('namespace', '__sockjs__')
+        if not self.namespace.startswith('/'):
+            self.namespace = '/%s'%self.namespace
 
     def flush_session(self, lid):
         del self.sessions[lid]
@@ -53,21 +46,17 @@ class SockJSServer(WSGIServer):
         return session
 
 
-class Application(object):
-    urls = {}
-
-    def __init__(self):
-        self.buffer = []
-
-    def __call__(self, environ, start_response):
-        start_response('404 NOT FOUND', [])
-        return ['404 Error: Page not found']
-
-
-def main(port=8080):
-    SockJSServer(('', port), Application()).serve_forever()
-
-
 if __name__ == '__main__':
     print 'Listening on port 8080'
-    main()
+
+    class Application(object):
+        urls = {}
+
+        def __init__(self):
+            self.buffer = []
+
+        def __call__(self, environ, start_response):
+            start_response('404 NOT FOUND', [])
+            return ['404 Error: Page not found']
+
+    SockJSServer(('', port), Application()).serve_forever()

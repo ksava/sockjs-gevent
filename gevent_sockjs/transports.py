@@ -1,6 +1,7 @@
-import protocol
-
+import gevent
 from gevent.queue import Empty
+
+from gevent_sockjs import protocol
 
 def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -25,15 +26,13 @@ class BaseTransport(object):
         raise NotImplemented()
 
     def write(self, data):
-
         if data is None:
             length = 0
         else:
             length = len(data)
 
-        if 'Content-Length' not in self.handler.response_headers_list:
+        if not self.handler.has_header('Content-Length'):
             self.handler.response_headers.append(('Content-Length', length))
-            self.handler.response_headers_list.append('Content-Length')
 
         self.handler.write(data)
 
@@ -76,7 +75,6 @@ class PollingTransport(BaseTransport):
         Spin lock the thread until we have a message on the
         gevent queue.
         """
-
         try:
             messages = session.get_messages(timeout=self.TIMING)
             messages = self.encode(messages)
@@ -94,9 +92,7 @@ class PollingTransport(BaseTransport):
         return []
 
     def post(self, session, action):
-
         if action == 'xhr_send':
-
             data = self.handler.wsgi_input.readline()#.replace("data=", "")
 
             messages = self.decode(data)
@@ -120,13 +116,11 @@ class PollingTransport(BaseTransport):
         delegates to another method depending on the session,
         request method, and action.
         """
-
         if session.is_new():
             self.handler.write_text(protocol.OPEN)
             return []
 
         if request_method == "GET":
-
             session.clear_disconnect_timeout();
             self.get(session, action)
             return []
@@ -144,7 +138,6 @@ class PollingTransport(BaseTransport):
 class XHRPollingTransport(PollingTransport):
 
     def write_frame(self, frame, data=None):
-
         if frame == FRAMES.OPEN:
             self.write(protocol.OPEN)
 
@@ -177,7 +170,6 @@ class IFrameTransport(BaseTransport):
 class WebSocketTransport(BaseTransport):
 
     def write_frame(self, frame, data=None):
-
         if frame == FRAMES.OPEN:
             self.write(protocol.OPEN)
 
@@ -195,9 +187,26 @@ class WebSocketTransport(BaseTransport):
             self.write(''.join([protocol.MESSAGE, data,'\n']))
 
     def connect(self, session, request_method, action):
+        session.incr_hits()
+        websocket = self.handler.environ['wsgi.websocket']
+        websocket.send(protocol.OPEN)
 
-        if session.is_new():
-            self.handler.write(protocol.OPEN)
-            return []
+        def send():
+            while True:
+                try:
+                    messages = session.get_messages(timeout=5.0)
+                    messages = self.encode(messages)
+                except Empty:
+                    messages = "[]"
 
-        return []
+                #if message is None:
+                #    session.kill()
+                #    break
+
+                websocket.send(''.join([protocol.MESSAGE, messages, '\n']))
+
+        gr1 = gevent.spawn(send)
+
+        #heartbeat = self.handler.environ['socketio'].start_heartbeat()
+
+        return [gr1] #, heartbeat]

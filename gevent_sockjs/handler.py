@@ -21,6 +21,9 @@ handler_types = {
     'iframe'     : ('recv', transports.IFrameTransport),
 }
 
+from pprint import pprint
+
+
 class SockJSHandler(WSGIHandler):
     """
     Basic request handling.
@@ -43,11 +46,15 @@ class SockJSHandler(WSGIHandler):
     # check
     SESSION_RE = re.compile(r"^((?!\.).)*$")
 
-    def __init__(self, *args, **kwargs):
-        super(SockJSHandler, self).__init__(*args, **kwargs)
 
     # Raw write actions
     # -----------------
+
+    def has_header(self, hdr):
+        for h, v in self.response_headers:
+            if h == hdr:
+                return True
+        return False
 
     def write_text(self, text):
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
@@ -55,9 +62,8 @@ class SockJSHandler(WSGIHandler):
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
 
-        if 'Content-Length' not in self.response_headers_list:
+        if not self.has_header('Content-Length'):
             self.response_headers.append(('Content-Length', len(text)))
-            self.response_headers_list.append('Content-Length')
 
         self.write(text)
 
@@ -67,9 +73,8 @@ class SockJSHandler(WSGIHandler):
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
 
-        if 'Content-Length' not in self.response_headers_list:
+        if not self.has_header('Content-Length'):
             self.response_headers.append(('Content-Length', len(html)))
-            self.response_headers_list.append('Content-Length')
 
         self.write(html)
 
@@ -117,13 +122,16 @@ class SockJSHandler(WSGIHandler):
         # TODO: actually put this in here
         html = protocol.IFRAME_HTML % ('http',)
 
-        if 'Content-Length' not in self.response_headers_list:
+        if not self.has_header('Content-Length'):
             self.response_headers.append(('Content-Length', len(html)))
-            self.response_headers_list.append('Content-Length')
 
         self.write(html)
 
     def handle_one_response(self):
+        path = self.environ.get('PATH_INFO')
+        if not path.startswith(self.server.namespace):
+            return super(SockJSHandler, self).handle_one_response()
+
         self.headers = []
         self.status = None
         self.headers_sent = False
@@ -131,16 +139,12 @@ class SockJSHandler(WSGIHandler):
         self.response_length = 0
         self.response_use_chunked = False
 
-        path = self.environ.get('PATH_INFO')
-
         url_tokens = self.URL_FORMAT.match(path)
-
         request_method = self.environ.get("REQUEST_METHOD")
-        print request_method, path
 
         # For debugging sessions
-        if 'info' in path:
-            self.write_html(str(map(str,self.server.sessions.values())))
+        if path.endswith('/info'):
+            self.write_html(str(map(str, self.server.sessions.values())))
             return
 
         # A sessioned call
@@ -166,12 +170,16 @@ class SockJSHandler(WSGIHandler):
             else:
                 return self.do404()
 
-        # Lookup the direction of the transport and its
-        # associated handler
-        direction, _ = handler_types.get(transport, (False,False))
-
         # Is it even a valid url?
         if not url_tokens:
+            return self.do404()
+
+        # Lookup the direction of the transport and its
+        # associated handler
+        direction, transport_cls = handler_types.get(transport, (False, None))
+
+        # Do we have a transport?
+        if transport_cls is None:
             return self.do404()
 
         # Did we get a session identifier in the url?
@@ -184,8 +192,7 @@ class SockJSHandler(WSGIHandler):
                 # exist.
                 create_if_null = direction == 'bi' or direction == 'recv'
 
-                session = self.server.get_session(session_uid, \
-                    create_if_null)
+                session = self.server.get_session(session_uid, create_if_null)
 
                 # Otherwise 404 them since they're trying to poll
                 # on a non-existent session.
@@ -199,23 +206,47 @@ class SockJSHandler(WSGIHandler):
             # not a session, greeting, or iframe so 404
             return self.do404()
 
+        self.environ['sockjs'] = session
+
         # Websockets are a special case... since we need to
         # context switch over to the WebSocketHandler
         if transport == 'websocket':
-            self.__class__ = WebSocketHandler
-            self.handle_one_response()
-
-        # Do we have a transport?
-        if transport:
-            direction, transport_cls = handler_types.get(transport, (False,False))
-        else:
-            return self.do404()
+            handler = SockJSWebSocketHandler(self)
+            if not handler.handle_one_response():
+                return self.do404()
 
         # Do we have a handler for that transport?
-        if transport_cls:
-            self.transport = transport_cls(self)
-        else:
-            return self.do404()
+        self.transport = transport_cls(self)
 
         async_calls = self.transport.connect(session, request_method, transport)
         gevent.joinall(async_calls)
+
+
+class SockJSWebSocketHandler(WebSocketHandler):
+
+    def __init__(self, handler):
+        self.__dict__.update(handler.__dict__)
+
+    def handle_one_response(self):
+        environ = self.environ
+        upgrade = environ.get('HTTP_UPGRADE', '').lower()
+        if upgrade == 'websocket':
+            connection = environ.get('HTTP_CONNECTION', '').lower()
+            if 'upgrade' in connection:
+                try:
+                    try:
+                        if environ.get("HTTP_SEC_WEBSOCKET_VERSION"):
+                            result = self._handle_hybi()
+                        elif environ.get("HTTP_ORIGIN"):
+                            result = self._handle_hixie()
+                    except:
+                        self.close_connection = True
+                        raise
+                    self.result = []
+                    if not result:
+                        return False
+                    return True
+                finally:
+                    self.log_request()
+
+        return False

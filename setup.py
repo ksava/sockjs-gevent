@@ -40,5 +40,8 @@ setup(name='gevent-sockjs',
           'console_scripts': [
               'sockjs-server = gevent_sockjs.server:main',
               ],
+          'paste.server_runner': [
+              'paster = gevent_sockjs.paster:sockjs_server_runner',
+              ],
           },
       )

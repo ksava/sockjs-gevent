@@ -76,8 +76,8 @@ def encode(message):
     """
     if isinstance(message, basestring):
         msg = message
-    elif isinstance(message, (object, dict)):
-        msg = encode(json.dumps(message))
+    elif isinstance(message, (object, dict, list)):
+        msg = json.dumps(message)
     else:
         raise ValueError("Unable to serialize: %s", str(message))
 

@@ -38,6 +38,8 @@ class Session(object):
         if self.hits > 0:
             self.connected = True
 
+        self.clear_disconnect_timeout()
+
     def is_new(self):
         return self.hits == 0
 
@@ -45,6 +47,7 @@ class Session(object):
         self.timeout.set()
 
     def heartbeat(self):
+        self.clear_disconnect_timeout()
         self.heartbeats += 1
         return self.heartbeats
 
@@ -64,7 +67,7 @@ class MemorySession(Session):
     store.
     """
 
-    timer = 5.0
+    timer = 10.0
 
     def __init__(self, server, session_id=None):
         self.session_id = session_id or str(uuid.uuid4())[:8]
@@ -78,7 +81,6 @@ class MemorySession(Session):
         self.timeout = Event()
 
         self.wsgi_app_greenlet = None
-        self.state = "NEW"
         self.sent_connected = False
 
         def disconnect_timeout():
