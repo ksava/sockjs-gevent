@@ -1,0 +1,11 @@
+Authors
+=======
+
+Stephen Diehl
+Nikolay Kim
+
+Thanks To
+=========
+
+Jeffrey Gellens ( gevent-socketio )
+Denis Bilenko ( gevent )
