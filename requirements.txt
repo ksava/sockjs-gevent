@@ -1,0 +1,2 @@
+-e git+https://github.com/majek/WebSocket-for-Python.git#egg=ws4py
+gevent==0.13.6
