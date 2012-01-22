@@ -3,11 +3,11 @@ import re
 import datetime
 import time
 import traceback
-
 from gevent.pywsgi import WSGIHandler
-from geventwebsocket.handler import WebSocketHandler
 
 import protocol
+
+from errors import Http404, Http500
 
 class SockJSHandler(WSGIHandler):
     """
@@ -34,12 +34,6 @@ class SockJSHandler(WSGIHandler):
 
     # Raw write actions
     # -----------------
-
-    def has_header(self, hdr):
-        for h, v in self.response_headers:
-            if h == hdr:
-                return True
-        return False
 
     def prep_response(self):
         self.time_start = time.time()
@@ -120,7 +114,7 @@ class SockJSHandler(WSGIHandler):
         self.time_finish = time.time()
         self.log_request()
 
-    def do500(self):
+    def do500(self, stacktrace=None):
         """
         Handle 500 errors, if we're in an exception context then
         print the stack trace is SockJSServer has trace=True.
@@ -129,11 +123,20 @@ class SockJSHandler(WSGIHandler):
         self.prep_response()
 
         if self.server.trace:
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            stack_trace = traceback.format_exception(exc_type, exc_value, exc_tb)
-            pretty_trace = str('\n'.join(stack_trace))
+            # If we get an explicit stack trace use that,
+            # otherwise grab it from the current frame.
 
-            self.write_text(pretty_trace)
+            if stacktrace:
+                pretty_trace = stacktrace
+            else:
+                exc_type, exc_value, exc_tb = sys.exc_info()
+                stack_trace = traceback.format_exception(exc_type, exc_value, exc_tb)
+                pretty_trace = str('\n'.join(stack_trace))
+
+            self.start_response("500 INTERNAL SERVER ERROR", self.headers)
+            self.result = [pretty_trace]
+            self.process_result()
+
             self.time_finish = time.time()
             self.log_request()
         else:
@@ -159,7 +162,7 @@ class SockJSHandler(WSGIHandler):
 
     def handle_one_response(self):
         path = self.environ.get('PATH_INFO')
-        request_method = self.environ.get("REQUEST_METHOD")
+        meth = self.environ.get("REQUEST_METHOD")
 
         self.router = self.server.application
         self.session_pool = self.server.session_pool
@@ -187,39 +190,21 @@ class SockJSHandler(WSGIHandler):
             transport   = tokens['transport']
 
             try:
-                result = self.router.route(route, session_uid, server, transport)
-                return self.write_text(result.session_id)
+                # Router determines the downlink route as a
+                # function of the given url parameters.
+                downlink = self.router.route(route, session_uid, server, transport)
+
+                # A downlink is some data-dependent connection
+                # to the client taken as a result of a request.
+                raw_request_data = self.wsgi_input.readline()
+                downlink(self, meth, raw_request_data)
+
+            except Http404:
+                return self.do404()
+            except Http500 as e:
+                return self.do500(e.stacktrace)
             except Exception:
                 return self.do500()
 
         else:
             self.do404()
-
-class SockJSWebSocketHandler(WebSocketHandler):
-
-    def __init__(self, handler):
-        self.__dict__.update(handler.__dict__)
-
-    def handle_one_response(self):
-        environ = self.environ
-        upgrade = environ.get('HTTP_UPGRADE', '').lower()
-        if upgrade == 'websocket':
-            connection = environ.get('HTTP_CONNECTION', '').lower()
-            if 'upgrade' in connection:
-                try:
-                    try:
-                        if environ.get("HTTP_SEC_WEBSOCKET_VERSION"):
-                            result = self._handle_hybi()
-                        elif environ.get("HTTP_ORIGIN"):
-                            result = self._handle_hixie()
-                    except:
-                        self.close_connection = True
-                        raise
-                    self.result = []
-                    if not result:
-                        return False
-                    return True
-                finally:
-                    self.log_request()
-
-        return False

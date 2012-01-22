@@ -45,12 +45,17 @@ class SockJSServer(WSGIServer):
         return session
 
 def devel_server():
+    """
+    A local server with code reload. Should only be used for
+    development.
+    """
 
     class EchoRoute(SockJSRoute):
         urls = {}
 
         def on_message(self, message):
-            self.send(message)
+            pass
+            #self.send(message)
 
     import gevent.monkey
     gevent.monkey.patch_all()
@@ -65,7 +70,12 @@ def devel_server():
         router = SockJSRouter({
             'echo': EchoRoute,
         })
-        SockJSServer(('',8081), router, trace=True).serve_forever()
+
+        try:
+            sockjs = SockJSServer(('',8081), router, trace=True)
+            sockjs.serve_forever()
+        except KeyboardInterrupt:
+            sockjs.kill()
 
 if __name__ == '__main__':
     devel_server()

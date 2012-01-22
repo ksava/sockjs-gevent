@@ -1,26 +1,33 @@
-import weakref
 import transports
+from errors import Http404, Http500
 
-handler_types = {
-    'websocket'  : ('bi', transports.WebSocketTransport),
+route_table = {
 
-    'xhr'        : ('recv', transports.XHRPollingTransport),
-    'xhr_send'   : ('send', transports.XHRPollingTransport),
+     # Ajax Tranports
+     # ==============
+    'xhr'           : transports.XHRPolling,
+    'xhr_send'      : transports.XHRSend,
+    'xhr_streaming' : transports.XHRSend,
+    'jsonp'         : transports.JSONPolling,
+    'jsonp_send'    : transports.JSONPolling,
 
-    'jsonp'      : ('recv', transports.JSONPolling),
-    'jsonp_send' : ('send', transports.JSONPolling),
+    # WebSockets
+    # ===============
+    'websocket'    : transports.WebSocket,
 
-    'htmlfile'   : ('recv', transports.HTMLFileTransport),
-    'iframe'     : ('recv', transports.IFrameTransport),
+    # File Transports
+    # ===============
+    'eventsource'   : transports.HTMLFile,
+    'htmlfile'      : transports.HTMLFile,
+    'iframe'        : transports.IFrame,
+
 }
-
 
 class SockJSRoute(object):
 
     allowed_transports = []
 
-    def __init__(self, session):
-        self.session = weakref.ref(session)
+    def __init__(self):
         self.allowed = set(self.allowed_transports)
 
     def transport_allowed(self, transport):
@@ -64,22 +71,38 @@ class SockJSRouter(object):
     routes = {}
 
     def __init__(self, applications):
+        """
+        Set up the routing table for the specific routes attached
+        to this server.
+        """
         for route, server in applications.iteritems():
-            self.routes[route] = server
+            self.routes[route] = server()
 
     def route(self, route, session_uid, server, transport):
-
-        direction, transport_cls = handler_types.get(transport)
-
-        create_if_null = direction in ('bi', 'recv')
-        session = self.server.get_session(session_uid, create_if_null)
+        """
+        Return the downlink transport to the client resulting
+        from request.
+        """
 
         route_handle = self.routes.get(route, None)
 
-        if not route:
-            raise Exception("No Route")
+        if not route_handle:
+            raise Http500()
 
-        #if route.transport_allowed(transport):
-            #return route
+        transport_cls = route_table.get(transport)
 
-        return session
+        session = self.server.get_session(session_uid, \
+            create_if_null=True)
+
+        # Initialize the transport and call, any side-effectful
+        # code is the __init__ method, the communication is
+        # invoked by __call__ method.
+
+        downlink = transport_cls(session)
+        downlink.on_message = route_handle.on_message
+
+        if session.is_new:
+            route_handle.on_open(session)
+            session.timeout.rawlink(route_handle.on_close)
+
+        return downlink

@@ -8,5 +8,5 @@ Thanks To
 =========
 
 Marek Majkowski ( sockjs )
-Jeffrey Gellens ( gevent-socketio )
+Jeffrey Gellens ( gevent-socketio & geventwebsocket )
 Denis Bilenko ( gevent )

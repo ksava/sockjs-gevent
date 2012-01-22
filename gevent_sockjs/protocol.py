@@ -4,9 +4,11 @@ import hashlib
 # Serializer
 # -----------
 
-# TODO: add support for msgpack
-
 # Fastest
+
+# TODO:
+# Should add some caveats about the unicode compatability
+# with ujson...
 try:
     import ujson
     has_ujson = True
@@ -44,8 +46,7 @@ json = pick_serializer()
 OPEN      = "o\n"
 CLOSE     = "c"
 MESSAGE   = "a"
-HEARTBEAT = "h"
-
+HEARTBEAT = "h\n"
 
 # ------------------
 

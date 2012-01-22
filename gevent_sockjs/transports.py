@@ -1,12 +1,12 @@
+import gevent
 from gevent.queue import Empty
 
 import protocol
 
 class BaseTransport(object):
 
-    def __init__(self, handler):
-        self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
-        self.handler = handler
+    def __init__(self, session):
+        self.session = session
 
     def encode(self, data):
         return protocol.encode(data)
@@ -14,22 +14,49 @@ class BaseTransport(object):
     def decode(self, data):
         return protocol.decode(data)
 
-    def write(self, data):
-        if data is None:
-            length = 0
-        else:
-            length = len(data)
+    def __call__(self, handler, request_method, raw_request_data):
+        """
+        Downlink function, action taken as a result of the
+        specified route.
+        """
+        raise NotImplemented()
 
-        if not self.handler.has_header('Content-Length'):
-            self.handler.response_headers.append(('Content-Length', length))
+# Receiving Transports
+# ====================
+#
+# Recieve messages from the client, provide them to the session
+# object and its callbacks, provide confirmation of any actions
+# taken per protocol.
 
-        self.handler.write(data)
+class XHRSend(BaseTransport):
+    direction = 'recv'
 
-    def write_multipart(self, data):
-        self.handler.write(data)
+    def __call__(self, handler, request_method, raw_request_data):
+        messages = self.decode(raw_request_data)
 
-    def start_response(self, *args, **kwargs):
-        self.handler.start_response(*args, **kwargs)
+        for msg in messages:
+            self.session.add_message(messages)
+
+        self.handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
+        self.handler.start_response("204 NO CONTENT", [])
+        self.handler.write_nothing()
+
+        return []
+
+class JSONPSend(BaseTransport):
+    direction = 'recv'
+
+    def __call__(self, handler, request_method, raw_request_data):
+        messages = self.decode(raw_request_data)
+
+        for msg in messages:
+            self.session.add_message(messages)
+
+        self.handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
+        self.handler.start_response("204 NO CONTENT", [])
+        self.handler.write_nothing()
+
+        return []
 
 
 class PollingTransport(BaseTransport):
@@ -55,7 +82,7 @@ class PollingTransport(BaseTransport):
             ("Connection", "close"),
             ("Content-Length", 0)
         ])
-        self.write('')
+        self.handler.write_text('')
 
     def get(self, session, action):
         """
@@ -75,22 +102,6 @@ class PollingTransport(BaseTransport):
         ])
 
         self.write(protocol.message_frame(messages))
-
-    def post(self, session, action):
-        if action == 'xhr_send':
-            data = self.handler.wsgi_input.readline()#.replace("data=", "")
-
-            messages = self.decode(data)
-
-            for msg in messages:
-                session.add_message(messages)
-
-            self.content_type = ("Content-Type", "text/html; charset=UTF-8")
-            self.start_response("204 NO CONTENT", [])
-            self.write(None)
-
-        elif action == 'xhr':
-            self.get(session, action)
 
     def connect(self, session, request_method, action):
         """
@@ -116,24 +127,57 @@ class PollingTransport(BaseTransport):
         else:
             raise Exception("No support for such method: " + request_method)
 
+# Polling Transports
+# ==================
+#
+# Poll for new messages on the server.
 
-class XHRPollingTransport(PollingTransport):
+class XHRPolling(PollingTransport):
+
+    TIMING = 2
+    content_type = ("Content-Type", "text/html; charset=UTF-8")
+
+    def poll(self, handler):
+        """
+        Spin lock the thread until we have a message on the
+        gevent queue.
+        """
+
+        try:
+            messages = self.session.get_messages(timeout=self.TIMING)
+            messages = self.encode(messages)
+        except Empty:
+            messages = "[]"
+
+        handler.start_response("200 OK", [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Connection", "close"),
+            self.content_type,
+        ])
+        self.on_message(messages)
+
+        handler.write_text(protocol.message_frame(messages))
+
+    def __call__(self, handler, request_method, raw_request_data):
+        """
+        joinall in the parent
+        """
+        return [gevent.spawn(self.poll, handler)]
+
+class XHRStreaming(PollingTransport):
     pass
-
 
 class JSONPolling(PollingTransport):
     pass
 
-
-class HTMLFileTransport(BaseTransport):
+class HTMLFile(BaseTransport):
     pass
 
-
-class IFrameTransport(BaseTransport):
+class IFrame(BaseTransport):
     pass
 
+class EventSource(BaseTransport):
+    pass
 
-class WebSocketTransport(BaseTransport):
-
-    def connect(self, session, request_method, action):
-        pass
+class WebSocket(BaseTransport):
+    pass
