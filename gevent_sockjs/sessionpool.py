@@ -2,11 +2,13 @@ import uuid
 import gevent
 
 from heapq import heappush, heappop
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class SessionPool(object):
     """
     A garbage collected Session Pool.
+
+    See: https://github.com/sdiehl/greengoop
     """
     gc_cycle = 10.0
 

@@ -47,10 +47,10 @@ Test Status:
     test_queriedUrl (tests.IframePage) ... ok
     test_simpleUrl (tests.IframePage) ... ok
     test_versionedUrl (tests.IframePage) ... ok
-    test_basic (tests.InfoTest) ... FAIL
-    test_disabled_websocket (tests.InfoTest) ... FAIL
-    test_entropy (tests.InfoTest) ... ERROR
-    test_options (tests.InfoTest) ... FAIL
+    test_basic (tests.InfoTest) ... ok
+    test_disabled_websocket (tests.InfoTest) ... ok
+    test_entropy (tests.InfoTest) ... ok
+    test_options (tests.InfoTest) ... ok
     test_xhr_server_decodes (tests.JSONEncoding) ... ERROR
     test_xhr_server_encodes (tests.JSONEncoding) ... ERROR
     test_content_types (tests.JsonPolling) ... FAIL
@@ -88,4 +88,3 @@ Test Status:
     test_options (tests.XhrStreaming) ... FAIL
     test_response_limit (tests.XhrStreaming) ... FAIL
     test_transport (tests.XhrStreaming) ... FAIL
-

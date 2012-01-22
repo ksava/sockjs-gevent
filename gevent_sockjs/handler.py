@@ -3,7 +3,9 @@ import re
 import datetime
 import time
 import traceback
+import random
 from gevent.pywsgi import WSGIHandler
+from Cookie import SimpleCookie
 
 import protocol
 
@@ -15,27 +17,25 @@ class SockJSHandler(WSGIHandler):
     """
 
     # Sessioned urls
-    URL_FORMAT = re.compile(r"""
+    DYNAMIC_FORMAT = re.compile(r"""
         ^/(?P<route>[^/]+)/        # sockjs route, alphanumeric not empty
         (?P<server_id>[^/.]+)/     # load balancer id, alphanumeric not empty, without (.)
         (?P<session_id>[^/.]+)/    # session id, alphanumeric not empty, without (.)
         (?P<transport>[^/.]+)$     # transport string, (Example: xhr | jsonp ... )
-        """
-    , re.X)
+        """, re.X)
 
-    # Topelevel urls
-    GREETING_RE = re.compile(r"^/(?P<route>[^/]+)/?$")
-    IFRAME_RE = re.compile(r"^/(?P<route>[^/]+)/iframe[0-9-.a-z_]*.html")
-
-    # Regex tester for valid session ids, provides string sanity
-    # check
-    SESSION_RE = re.compile(r"^((?!\.).)*$")
-
+    STATIC_FORMAT = re.compile(r"""
+        ^/(?P<route>[^/]+)(/)?     # sockjs route, alphanumeric not empty
+        (?P<suffix>[^/]+)?$        # url suffix ( Example: / , info, iframe.html )
+    """, re.X)
 
     # Raw write actions
     # -----------------
 
     def prep_response(self):
+        """
+        The default headers.
+        """
         self.time_start = time.time()
         self.status = None
 
@@ -53,12 +53,20 @@ class SockJSHandler(WSGIHandler):
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
 
-        #self.write(text)
         self.result = [text]
         self.process_result()
 
+    def write_json(self, json):
+        self.content_type = ("Content-Type", "application/json; charset=UTF-8")
+
+        self.headers += [self.content_type]
+        self.start_response("200 OK", self.headers)
+
+        self.result = [protocol.encode(json)]
+        self.log_request()
+        self.process_result()
+
     def write_html(self, html):
-        self.prep_response()
         self.content_type = ("Content-Type", "text/html; charset=UTF-8")
 
         self.headers += [self.content_type]
@@ -67,48 +75,37 @@ class SockJSHandler(WSGIHandler):
         self.result = [html]
         self.process_result()
 
+    def write_options(self, allowed_methods):
+        self.headers += [
+            ('Access-Control-Allow-Methods',(', '.join(allowed_methods)))
+        ]
+
+        self.enable_caching()
+        self.enable_cookie()
+        self.enable_cors()
+        self.write_nothing()
+
     def write_nothing(self):
-        self.prep_response()
         self.start_response("204 NO CONTENT", self.headers)
 
         self.result = [None]
         self.process_result()
 
-    def write_iframe(self):
-        self.prep_response()
-        cached = self.environ.get('HTTP_IF_NONE_MATCH')
-
-        # TODO: check this is equal to our MD5
-        if cached:
-            self.start_response("304 NOT MODIFIED", self.headers)
-            self.write(None)
-            return
-
-        self.content_type = ("Content-Type", "text/html; charset=UTF-8")
-        self.headers += [
-            ('ETag', protocol.IFRAME_MD5),
-            self.content_type
-        ]
-        self.enable_caching()
-
-        self.start_response("200 OK", self.headers)
-
-        # TODO: actually put this in here
-        html = protocol.IFRAME_HTML % ('http',)
-        self.result = [html]
-        self.process_result()
-
     def greeting(self):
         self.write_text('Welcome to SockJS!\n')
 
-    def do404(self):
+    def do404(self, message=None):
         self.prep_response()
 
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
         self.headers += [self.content_type]
 
         self.start_response("404 NOT FOUND", self.headers)
-        self.result = ['404 Error: Page not found']
+        if message:
+            self.result = [message]
+        else:
+            self.result = ['404 Error: Page not found']
+
         self.process_result()
 
         self.time_finish = time.time()
@@ -135,20 +132,47 @@ class SockJSHandler(WSGIHandler):
 
             self.start_response("500 INTERNAL SERVER ERROR", self.headers)
             self.result = [pretty_trace]
-            self.process_result()
-
-            self.time_finish = time.time()
-            self.log_request()
         else:
             self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
             self.headers += [self.content_type]
 
             self.start_response("500 INTERNAL SERVER ERROR", self.headers)
             self.result = ['500: Interneal Server Error']
-            self.process_result()
 
-            self.time_finish = time.time()
-            self.log_request()
+        self.process_result()
+        self.time_finish = time.time()
+        self.log_request()
+
+    # Header Manipulation
+    # -------------------
+
+    def enable_cors(self):
+        origin = self.environ.get("HTTP_ORIGIN", '*')
+
+        self.headers += [
+            ('access-control-allow-origin', origin),
+            ('access-control-allow-credentials', 'true')
+        ]
+
+    def enable_nocache(self):
+        self.headers += [
+            ('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'),
+            # Implied:
+            #('Expires', False),
+            #('Last-Modified', False),
+        ]
+
+    def enable_cookie(self, cookies=None):
+        if cookies:
+            for cookie in cookies:
+                k, v = cookie.output().split(':')
+                self.headers += [(k,v)]
+        else:
+            cookie = SimpleCookie()
+            cookie['JSESSIONID'] = 'dummy'
+            cookie['JSESSIONID']['path'] = '/'
+            k, v = cookie.output().split(':')
+            self.headers += [(k,v)]
 
     def enable_caching(self):
         d = datetime.datetime.now() + datetime.timedelta(days=365)
@@ -157,7 +181,7 @@ class SockJSHandler(WSGIHandler):
         self.headers += [
             ('Cache-Control', 'max-age=%d, public' % s),
             ('Expires', d.strftime('%a, %d %b %Y %H:%M:%S')),
-            ('access-control-max-age', s),
+            ('access-control-max-age', int(s)),
         ]
 
     def handle_one_response(self):
@@ -170,19 +194,28 @@ class SockJSHandler(WSGIHandler):
         # Static URLs
         # -----------
 
-        if self.GREETING_RE.match(path):
-            return self.greeting()
+        static_url = self.STATIC_FORMAT.match(path)
+        dynamic_url = self.DYNAMIC_FORMAT.match(path)
 
-        if self.IFRAME_RE.match(path):
-            return self.write_iframe()
+        if static_url:
+            tokens = static_url.groupdict()
 
-        #if self.INFO_RE.match)path):
-            #pass
+            route       = tokens['route']
+            suffix      = tokens['suffix']
 
-        session_url = self.URL_FORMAT.match(path)
+            try:
+                handler = self.router.route_static(route, suffix)
+                raw_request_data = self.wsgi_input.readline()
 
-        if session_url:
-            tokens = session_url.groupdict()
+                self.prep_response()
+                handler(self, meth, raw_request_data)
+            except Http404 as e:
+                return self.do404(e.message)
+            except Http500 as e:
+                return self.do500(e.stacktrace)
+
+        elif dynamic_url:
+            tokens = dynamic_url.groupdict()
 
             route       = tokens['route']
             session_uid = tokens['session_id']
@@ -192,15 +225,22 @@ class SockJSHandler(WSGIHandler):
             try:
                 # Router determines the downlink route as a
                 # function of the given url parameters.
-                downlink = self.router.route(route, session_uid, server, transport)
+                downlink = self.router.route_dynamic(
+                    route,
+                    session_uid,
+                    server,
+                    transport
+                )
 
                 # A downlink is some data-dependent connection
                 # to the client taken as a result of a request.
                 raw_request_data = self.wsgi_input.readline()
+
+                self.prep_response()
                 downlink(self, meth, raw_request_data)
 
-            except Http404:
-                return self.do404()
+            except Http404 as e:
+                return self.do404(e.message)
             except Http500 as e:
                 return self.do500(e.stacktrace)
             except Exception:

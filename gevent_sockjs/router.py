@@ -1,7 +1,46 @@
+import re
 import transports
-from errors import Http404, Http500
+import static
 
-route_table = {
+from errors import *
+
+# Route Tables
+# ============
+
+class RegexRouter(object):
+    """
+    A hybrid hash table, regex matching table.
+
+    Tries to do O(1) hash lookup falls back on
+    worst case O(n) regex matching.
+    """
+    _re = []
+    _dct = {}
+
+    def __init__(self, dct):
+        for k, v in dct.iteritems():
+            try:
+                self._re.append((re.compile(k),v))
+            except:
+                pass
+            self._dct[k] = v
+
+    def __getitem__(self, k):
+        if self._dct.has_key(k):
+            return self._dct[k]
+        else:
+            for r, v in self._re:
+                if r.match(k):
+                    return v
+        raise KeyError(k)
+
+static_routes = RegexRouter({
+    None                       : static.Greeting,
+    'info'                     : static.InfoHandler,
+    r'iframe[0-9-.a-z_]*.html' : static.IFrameHandler,
+})
+
+dynamic_routes = {
 
      # Ajax Tranports
      # ==============
@@ -20,18 +59,18 @@ route_table = {
     'eventsource'   : transports.HTMLFile,
     'htmlfile'      : transports.HTMLFile,
     'iframe'        : transports.IFrame,
-
 }
 
 class SockJSRoute(object):
 
-    allowed_transports = []
+
+    disallowed_transports = tuple()
 
     def __init__(self):
-        self.allowed = set(self.allowed_transports)
+        self.disallowed = set(self.disallowed_transports)
 
     def transport_allowed(self, transport):
-        return transport in self.allowed
+        return transport not in self.disallowed
 
     # Event Callbacks
     # ===============
@@ -78,18 +117,34 @@ class SockJSRouter(object):
         for route, server in applications.iteritems():
             self.routes[route] = server()
 
-    def route(self, route, session_uid, server, transport):
+    def route_static(self, route, suffix):
+        try:
+            route_handle = self.routes[route]
+        except:
+            raise Http404('No such route')
+
+        try:
+            handle_cls = static_routes[suffix]
+        except KeyError:
+            raise Http404('No such static page ' + str(suffix))
+
+        return handle_cls(route_handle)
+
+    def route_dynamic(self, route, session_uid, server, transport):
         """
         Return the downlink transport to the client resulting
         from request.
         """
 
-        route_handle = self.routes.get(route, None)
+        try:
+            route_handle = self.routes[route]
+        except:
+            raise Http500('No such route')
 
-        if not route_handle:
-            raise Http500()
-
-        transport_cls = route_table.get(transport)
+        try:
+            transport_cls = dynamic_routes[transport]
+        except:
+            raise Http500('No such transport')
 
         session = self.server.get_session(session_uid, \
             create_if_null=True)
@@ -98,7 +153,7 @@ class SockJSRouter(object):
         # code is the __init__ method, the communication is
         # invoked by __call__ method.
 
-        downlink = transport_cls(session)
+        downlink = transport_cls(session, route_handle)
         downlink.on_message = route_handle.on_message
 
         if session.is_new:

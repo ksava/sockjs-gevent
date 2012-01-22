@@ -51,11 +51,17 @@ def devel_server():
     """
 
     class EchoRoute(SockJSRoute):
-        urls = {}
 
         def on_message(self, message):
             pass
             #self.send(message)
+
+    class DisabledWebsocket(SockJSRoute):
+
+        disallowed_transports = ('websocket',)
+
+        def on_message(self, message):
+            pass
 
     import gevent.monkey
     gevent.monkey.patch_all()
@@ -69,6 +75,7 @@ def devel_server():
 
         router = SockJSRouter({
             'echo': EchoRoute,
+            'disabled_websocket_echo': DisabledWebsocket,
         })
 
         try:

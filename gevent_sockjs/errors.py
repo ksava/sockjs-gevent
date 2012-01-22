@@ -1,7 +1,19 @@
 class Http404(Exception):
 
+    def __init__(self, message=None):
+        if message:
+            self.message = message
+        else:
+            self.message = "404: Page Not Found"
+        assert isinstance(self.message, basestring)
+
     def __str__(self):
-        return '404: Page not found'
+        return self.message
+
+class Http405(Exception):
+
+    def __str__(self):
+        return '405: Method Not Allowed'
 
 class Http500(Exception):
     """

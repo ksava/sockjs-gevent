@@ -5,8 +5,9 @@ import protocol
 
 class BaseTransport(object):
 
-    def __init__(self, session):
+    def __init__(self, session, route):
         self.session = session
+        self.route = route
 
     def encode(self, data):
         return protocol.encode(data)
