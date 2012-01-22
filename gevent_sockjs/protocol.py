@@ -108,3 +108,9 @@ def message_frame(data):
     assert ']' in data
 
     return ''.join([MESSAGE, data, '\n'])
+
+def enum(*sequential, **named):
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    return type('Enum', (), enums)
+
+FRAMES = enum( 'CLOSE', 'OPEN', 'MESSAGE', 'HEARTBEAT' )

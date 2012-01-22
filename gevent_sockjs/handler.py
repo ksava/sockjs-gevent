@@ -1,28 +1,13 @@
+import sys
 import re
 import datetime
+import time
+import traceback
 
-import gevent
 from gevent.pywsgi import WSGIHandler
 from geventwebsocket.handler import WebSocketHandler
 
 import protocol
-import transports
-
-handler_types = {
-    'websocket'  : ('bi', transports.WebSocketTransport),
-
-    'xhr'        : ('recv', transports.XHRPollingTransport),
-    'xhr_send'   : ('send', transports.XHRPollingTransport),
-
-    'jsonp'      : ('recv', transports.JSONPolling),
-    'jsonp_send' : ('send', transports.JSONPolling),
-
-    'htmlfile'   : ('recv', transports.HTMLFileTransport),
-    'iframe'     : ('recv', transports.IFrameTransport),
-}
-
-from pprint import pprint
-
 
 class SockJSHandler(WSGIHandler):
     """
@@ -56,52 +41,47 @@ class SockJSHandler(WSGIHandler):
                 return True
         return False
 
+    def prep_response(self):
+        self.time_start = time.time()
+        self.status = None
+
+        self.headers = []
+        self.headers_sent = False
+
+        self.result = None
+        self.response_use_chunked = False
+        self.response_length = 0
+
     def write_text(self, text):
+        self.prep_response()
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
 
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
 
-        if not self.has_header('Content-Length'):
-            self.response_headers.append(('Content-Length', len(text)))
-
-        self.write(text)
+        #self.write(text)
+        self.result = [text]
+        self.process_result()
 
     def write_html(self, html):
+        self.prep_response()
         self.content_type = ("Content-Type", "text/html; charset=UTF-8")
 
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
 
-        if not self.has_header('Content-Length'):
-            self.response_headers.append(('Content-Length', len(html)))
-
-        self.write(html)
+        self.result = [html]
+        self.process_result()
 
     def write_nothing(self):
+        self.prep_response()
         self.start_response("204 NO CONTENT", self.headers)
-        self.write(None)
 
-    def greeting(self):
-        self.write_text('Welcome to SockJS!\n')
+        self.result = [None]
+        self.process_result()
 
-    def do404(self):
-        """
-        Let the vanilla WSGIHandler deal with the 404.
-        """
-        return super(SockJSHandler, self).handle_one_response()
-
-    def enable_caching(self):
-        d = datetime.datetime.now() + datetime.timedelta(days=365)
-        s = datetime.timedelta(days=365).total_seconds()
-
-        self.headers += [
-            ('Cache-Control', 'max-age=%d, public' % s),
-            ('Expires', d.strftime('%a, %d %b %Y %H:%M:%S')),
-            ('access-control-max-age', s),
-        ]
-
-    def serve_iframe(self):
+    def write_iframe(self):
+        self.prep_response()
         cached = self.environ.get('HTTP_IF_NONE_MATCH')
 
         # TODO: check this is equal to our MD5
@@ -121,107 +101,99 @@ class SockJSHandler(WSGIHandler):
 
         # TODO: actually put this in here
         html = protocol.IFRAME_HTML % ('http',)
+        self.result = [html]
+        self.process_result()
 
-        if not self.has_header('Content-Length'):
-            self.response_headers.append(('Content-Length', len(html)))
+    def greeting(self):
+        self.write_text('Welcome to SockJS!\n')
 
-        self.write(html)
+    def do404(self):
+        self.prep_response()
+
+        self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
+        self.headers += [self.content_type]
+
+        self.start_response("404 NOT FOUND", self.headers)
+        self.result = ['404 Error: Page not found']
+        self.process_result()
+
+        self.time_finish = time.time()
+        self.log_request()
+
+    def do500(self):
+        """
+        Handle 500 errors, if we're in an exception context then
+        print the stack trace is SockJSServer has trace=True.
+        """
+
+        self.prep_response()
+
+        if self.server.trace:
+            exc_type, exc_value, exc_tb = sys.exc_info()
+            stack_trace = traceback.format_exception(exc_type, exc_value, exc_tb)
+            pretty_trace = str('\n'.join(stack_trace))
+
+            self.write_text(pretty_trace)
+            self.time_finish = time.time()
+            self.log_request()
+        else:
+            self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
+            self.headers += [self.content_type]
+
+            self.start_response("500 INTERNAL SERVER ERROR", self.headers)
+            self.result = ['500: Interneal Server Error']
+            self.process_result()
+
+            self.time_finish = time.time()
+            self.log_request()
+
+    def enable_caching(self):
+        d = datetime.datetime.now() + datetime.timedelta(days=365)
+        s = datetime.timedelta(days=365).total_seconds()
+
+        self.headers += [
+            ('Cache-Control', 'max-age=%d, public' % s),
+            ('Expires', d.strftime('%a, %d %b %Y %H:%M:%S')),
+            ('access-control-max-age', s),
+        ]
 
     def handle_one_response(self):
         path = self.environ.get('PATH_INFO')
-        if not path.startswith(self.server.namespace):
-            return super(SockJSHandler, self).handle_one_response()
-
-        self.headers = []
-        self.status = None
-        self.headers_sent = False
-        self.result = None
-        self.response_length = 0
-        self.response_use_chunked = False
-
-        url_tokens = self.URL_FORMAT.match(path)
         request_method = self.environ.get("REQUEST_METHOD")
 
-        # For debugging sessions
-        if path.endswith('/info'):
-            self.write_html(str(map(str, self.server.sessions.values())))
-            return
+        self.router = self.server.application
+        self.session_pool = self.server.session_pool
 
-        # A sessioned call
-        if url_tokens:
-            url_tokens = url_tokens.groupdict()
+        # Static URLs
+        # -----------
 
-            session_uid = url_tokens['session_id']
-            server = url_tokens['server_id']
-            transport = url_tokens['transport']
+        if self.GREETING_RE.match(path):
+            return self.greeting()
 
-        # A toplevel call
-        else:
-            session = None
-            server = None
-            transport = None
+        if self.IFRAME_RE.match(path):
+            return self.write_iframe()
 
-            if self.GREETING_RE.match(path):
-                return self.greeting()
-            elif self.IFRAME_RE.match(path):
-                self.serve_iframe()
+        #if self.INFO_RE.match)path):
+            #pass
 
-            # A completely invalid url
-            else:
-                return self.do404()
+        session_url = self.URL_FORMAT.match(path)
 
-        # Is it even a valid url?
-        if not url_tokens:
-            return self.do404()
+        if session_url:
+            tokens = session_url.groupdict()
 
-        # Lookup the direction of the transport and its
-        # associated handler
-        direction, transport_cls = handler_types.get(transport, (False, None))
+            route       = tokens['route']
+            session_uid = tokens['session_id']
+            server      = tokens['server_id']
+            transport   = tokens['transport']
 
-        # Do we have a transport?
-        if transport_cls is None:
-            return self.do404()
-
-        # Did we get a session identifier in the url?
-        if session_uid:
-
-            # Ensure the session identifier is actually alphanumeric
-            if self.SESSION_RE.match(session_uid):
-                # If the user tries to poll on a recv url, then
-                # let them create a session if it doesn't yet
-                # exist.
-                create_if_null = direction == 'bi' or direction == 'recv'
-
-                session = self.server.get_session(session_uid, create_if_null)
-
-                # Otherwise 404 them since they're trying to poll
-                # on a non-existent session.
-                if not session:
-                    return self.do404()
-
-            else:
-                return self.do404()
+            try:
+                result = self.router.route(route, session_uid, server, transport)
+                return self.write_text(result.session_id)
+            except Exception:
+                return self.do500()
 
         else:
-            # not a session, greeting, or iframe so 404
-            return self.do404()
-
-        self.environ['sockjs'] = session
-
-        # Websockets are a special case... since we need to
-        # context switch over to the WebSocketHandler
-        if transport == 'websocket':
-            handler = SockJSWebSocketHandler(self)
-            if not handler.handle_one_response():
-                return self.do404()
-
-        # Do we have a handler for that transport?
-        self.transport = transport_cls(self)
-
-        async_calls = self.transport.connect(session, request_method, transport)
-        if async_calls:
-            gevent.joinall(async_calls)
-
+            self.do404()
 
 class SockJSWebSocketHandler(WebSocketHandler):
 

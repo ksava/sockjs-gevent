@@ -1,14 +1,6 @@
-import gevent
 from gevent.queue import Empty
 
-from gevent_sockjs import protocol
-
-def enum(*sequential, **named):
-    enums = dict(zip(sequential, range(len(sequential))), **named)
-    return type('Enum', (), enums)
-
-FRAMES = enum( 'CLOSE', 'OPEN', 'MESSAGE', 'HEARTBEAT' )
-
+import protocol
 
 class BaseTransport(object):
 
@@ -144,26 +136,4 @@ class IFrameTransport(BaseTransport):
 class WebSocketTransport(BaseTransport):
 
     def connect(self, session, request_method, action):
-        session.incr_hits()
-        websocket = self.handler.environ['wsgi.websocket']
-        websocket.send(protocol.OPEN)
-
-        def send():
-            while True:
-                try:
-                    messages = session.get_messages(timeout=5.0)
-                    messages = self.encode(messages)
-                except Empty:
-                    messages = "[]"
-
-                #if message is None:
-                #    session.kill()
-                #    break
-
-                websocket.send(protocol.message_frame(messages))
-
-        gr1 = gevent.spawn(send)
-
-        #heartbeat = self.handler.environ['socketio'].start_heartbeat()
-
-        return [gr1] #, heartbeat]
+        pass

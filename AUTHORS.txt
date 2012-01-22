@@ -7,5 +7,6 @@ Nikolay Kim
 Thanks To
 =========
 
+Marek Majkowski ( sockjs )
 Jeffrey Gellens ( gevent-socketio )
 Denis Bilenko ( gevent )

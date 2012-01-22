@@ -3,16 +3,16 @@ from setuptools import setup, find_packages
 
 version='0.1dev'
 
-install_requires = ['setuptools',
-                    'gevent',
-                    'gevent-websocket',
-                    ]
+install_requires = [
+    'setuptools',
+    'gevent',
+    'gevent-websocket',
+]
 
 tests_require = install_requires + ['nose']
 
 def read(f):
     return open(os.path.join(os.path.dirname(__file__), f)).read().strip()
-
 
 setup(name='gevent-sockjs',
       version=version,
@@ -39,9 +39,6 @@ setup(name='gevent-sockjs',
       entry_points = {
           'console_scripts': [
               'sockjs-server = gevent_sockjs.server:main',
-              ],
-          'paste.server_runner': [
-              'paster = gevent_sockjs.paster:sockjs_server_runner',
               ],
           },
       )

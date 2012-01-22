@@ -21,7 +21,7 @@ import unittest2 as unittest
 from utils import GET, GET_async, POST, POST_async, OPTIONS
 from utils import WebSocket8Client
 import uuid
-
+import nose
 
 # Base URL
 # ========
@@ -1308,4 +1308,4 @@ class HandlingClose(Test):
 
 # Make this script runnable.
 if __name__ == '__main__':
-    unittest.main()
+    nose.main()

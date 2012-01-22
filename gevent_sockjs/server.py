@@ -1,9 +1,9 @@
-from weakref import WeakValueDictionary
+import session
+from handler import SockJSHandler
+from router import SockJSRoute, SockJSRouter
+from sessionpool import SessionPool
+
 from gevent.pywsgi import WSGIServer
-
-from gevent_sockjs import session
-from gevent_sockjs.handler import SockJSHandler
-
 
 class SockJSServer(WSGIServer):
 
@@ -11,52 +11,61 @@ class SockJSServer(WSGIServer):
     handler_class = SockJSHandler
 
     def __init__(self, *args, **kwargs):
+        self.trace = kwargs.pop('trace', False)
+
         super(SockJSServer, self).__init__(*args, **kwargs)
+        self.session_pool = SessionPool()
 
-        # Use weakrefs so that we don't not GC sessions purely
-        # from their references in this session container
-        self.sessions = WeakValueDictionary()
+        # hack to get the server inside the router
+        self.application.server = self
 
-        self.namespace = kwargs.get('namespace', '__sockjs__')
-        if not self.namespace.startswith('/'):
-            self.namespace = '/%s'%self.namespace
-
-    def flush_session(self, lid):
-        del self.sessions[lid]
+    def del_session(self, uid):
+        del self.sessions[uid]
 
     def get_session(self, session_id='', create_if_null=False):
-        """Return an existing or new client Session."""
+        """
+        Return an existing or new client Session.
+        """
 
         # TODO: assert session_id has sufficent entropy
         #assert len(session_id) > 3
 
         # Is it an existing session?
-        session = self.sessions.get(session_id)
+        session = self.session_pool.get(session_id)
 
         # Otherwise let the client choose their session_id, if
         # this transport direction allows
         if create_if_null and session is None:
-
             session = self.session_backend(self, session_id)
-            self.sessions[session_id] = session
+            self.session_pool.add(session)
 
         elif session:
             session.incr_hits()
 
         return session
 
+def devel_server():
 
-if __name__ == '__main__':
-    print 'Listening on port 8080'
-
-    class Application(object):
+    class EchoRoute(SockJSRoute):
         urls = {}
 
-        def __init__(self):
-            self.buffer = []
+        def on_message(self, message):
+            self.send(message)
 
-        def __call__(self, environ, start_response):
-            start_response('404 NOT FOUND', [])
-            return ['404 Error: Page not found']
+    import gevent.monkey
+    gevent.monkey.patch_all()
 
-    SockJSServer(('', port), Application()).serve_forever()
+    # Need to moneky patch the threading module to
+    # use greenlets
+    import werkzeug.serving
+
+    @werkzeug.serving.run_with_reloader
+    def runServer(*args):
+
+        router = SockJSRouter({
+            'echo': EchoRoute,
+        })
+        SockJSServer(('',8081), router, trace=True).serve_forever()
+
+if __name__ == '__main__':
+    devel_server()
