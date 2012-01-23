@@ -34,9 +34,9 @@ class XHRSend(BaseTransport):
 
     def __call__(self, handler, request_method, raw_request_data):
         messages = self.decode(raw_request_data)
-        #self.on_message(messages)
 
         for msg in messages:
+            #self.conn.on_message(msg)
             self.session.add_message(messages)
 
         handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
@@ -154,6 +154,8 @@ class XHRPolling(PollingTransport):
         except Empty:
             messages = "[]"
 
+        self.session.unlock()
+
         handler.start_response("200 OK", [
             ("Access-Control-Allow-Origin", "*"),
             ("Connection", "close"),
@@ -170,7 +172,12 @@ class XHRPolling(PollingTransport):
         if self.session.is_new():
             handler.write_text(protocol.OPEN)
             return []
+        elif self.session.is_locked():
+            lock_error = protocol.close_frame(2010, "Another connection still open")
+            handler.write_text(lock_error)
+            return []
         else:
+            self.session.lock()
             return [gevent.spawn(self.poll, handler)]
 
 class XHRStreaming(PollingTransport):

@@ -156,7 +156,7 @@ class SockJSRouter(object):
             create_if_null)
 
         if not session:
-            raise Http404('No such session')
+            raise Http404()
 
         # Initialize the transport and call, any side-effectful
         # code is the __init__ method, the communication is

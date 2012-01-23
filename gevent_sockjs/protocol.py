@@ -100,7 +100,7 @@ def decode(data):
     return messages
 
 def close_frame(code, reason):
-    return '%s[%d,"%s"]' % (CLOSE, code, reason)
+    return '%s[%d,"%s"]\n' % (CLOSE, code, reason)
 
 
 def message_frame(data):

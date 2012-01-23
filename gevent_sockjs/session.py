@@ -23,6 +23,11 @@ class Session(object):
         self.forever = False
         self.session_id = self.generate_uid()
 
+
+        # Async event, use rawlink to string callbacks
+        self.timeout = Event()
+        self.locked = Event()
+
     def generate_uid(self):
         """
         Returns a string of the unique identifier of the session.
@@ -79,22 +84,17 @@ class Session(object):
     def kill(self):
         raise NotImplemented()
 
+    def is_locked(self):
+        return self.locked.is_set()
+
+    def lock(self):
+        self.locked.set()
+
+    def unlock(self):
+        self.locked.clear()
+
     def __str__(self):
-        result = ['session_id=%r' % self.session_id]
-
-        if self.connected:
-            result.append('connected')
-        else:
-            result.append('disconnected')
-
-        if self.queue.qsize():
-            result.append('queue[%s]' % self.queue.qsize())
-        if self.hits:
-            result.append('hits=%s' % self.hits)
-        if self.heartbeats:
-            result.append('heartbeats=%s' % self.heartbeats)
-
-        return ' '.join(result)
+        pass
 
 class MemorySession(Session):
     """
@@ -114,9 +114,6 @@ class MemorySession(Session):
         self.hits = 0
         self.heartbeats = 0
         self.connected = False
-
-        # Async event, use rawlink to string callbacks
-        self.timeout = Event()
 
     def add_message(self, msg):
         self.queue.put_nowait(msg)

@@ -129,6 +129,13 @@ class Test(unittest.TestCase):
         self.assertFalse(r['Expires'])
         self.assertFalse(r['Last-Modified'])
 
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Wait five seconds for the current sessions to expire.
+        """
+        time.sleep(5)
+
 
 # Greeting url: `/`
 # ----------------
@@ -355,7 +362,6 @@ class SessionURLs(Test):
     # A session is identified by only `session_id`. `server_id` is a
     # parameter for load balancer and must be ignored by the server.
     def test_ignoringServerId(self):
-        ''' See Protocol.test_simpleSession for explanation. '''
         session_id = str(uuid.uuid4())
         r = POST(base_url + '/000/' + session_id + '/xhr')
         self.assertEqual(r.status, 200)
@@ -497,12 +503,10 @@ class WebsocketHttpErrors(Test):
     # Server should be able to reject connections if origin is
     # invalid.
     def test_verifyOrigin(self):
-        '''
-        r = GET(base_url + '/0/0/websocket', {'Upgrade': 'WebSocket',
-                                              'Origin': 'VeryWrongOrigin'})
-        self.assertEqual(r.status, 400)
-        self.assertEqual(r.body, 'Unverified origin.')
-        '''
+        #r = GET(base_url + '/0/0/websocket', {'Upgrade': 'WebSocket',
+        #                                      'Origin': 'VeryWrongOrigin'})
+        #self.assertEqual(r.status, 400)
+        #self.assertEqual(r.body, 'Unverified origin.')
         pass
 
     # Some proxies and load balancers can rewrite 'Connection' header,

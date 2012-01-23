@@ -4,6 +4,8 @@ import datetime
 import time
 import traceback
 import random
+
+import gevent
 from gevent.pywsgi import WSGIHandler
 from Cookie import SimpleCookie
 
@@ -94,19 +96,25 @@ class SockJSHandler(WSGIHandler):
     def greeting(self):
         self.write_text('Welcome to SockJS!\n')
 
-    def do404(self, message=None):
+    def do404(self, message=None, cookie=False):
         self.prep_response()
 
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
         self.headers += [self.content_type]
 
+        if cookie:
+            self.enable_cookie()
+
         self.start_response("404 NOT FOUND", self.headers)
+
         if message:
             self.result = [message]
         else:
             self.result = ['404 Error: Page not found']
 
         self.process_result()
+
+        self.wsgi_input._discard()
 
         self.time_finish = time.time()
         self.log_request()
@@ -206,6 +214,7 @@ class SockJSHandler(WSGIHandler):
             try:
                 handler = self.router.route_static(route, suffix)
                 raw_request_data = self.wsgi_input.readline()
+                self.wsgi_input._discard()
 
                 self.prep_response()
                 handler(self, meth, raw_request_data)
@@ -237,10 +246,12 @@ class SockJSHandler(WSGIHandler):
                 raw_request_data = self.wsgi_input.readline()
 
                 self.prep_response()
-                downlink(self, meth, raw_request_data)
+                threads = downlink(self, meth, raw_request_data)
+
+                gevent.joinall(threads)
 
             except Http404 as e:
-                return self.do404(e.message)
+                return self.do404(e.message, cookie=True)
             except Http500 as e:
                 return self.do500(e.stacktrace)
             except Exception:
