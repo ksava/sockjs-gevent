@@ -1,9 +1,10 @@
 gevent-sockjs
 =============
 
-A work in progress gevent server backend for SockJS.
+A work in progress gevent server backend for SockJS.  General goal is to have a
+faithful implemention of @majek's [sockjs-protocol](https://github.com/sockjs/sockjs-protocol) that plays nicely with gevent & green threads.
 
-Very unstable at the moment, does not pass all sockjs-protocol tests.
+Somewhat unstable at the moment, does not pass all sockjs-protocol tests.
 
 Running
 =======
@@ -35,7 +36,7 @@ Test Status:
     test_notFound (tests.BaseUrlGreeting) ... ok
     test_response_limit (tests.EventSource) ... FAIL
     test_transport (tests.EventSource) ... FAIL
-    test_abort_xhr_polling (tests.HandlingClose) ... ERROR
+    test_abort_xhr_polling (tests.HandlingClose) ... FAIL
     test_abort_xhr_streaming (tests.HandlingClose) ... FAIL
     test_close_frame (tests.HandlingClose) ... FAIL
     test_close_request (tests.HandlingClose) ... FAIL
@@ -62,7 +63,6 @@ Test Status:
     test_close (tests.RawWebsocket) ... ERROR
     test_transport (tests.RawWebsocket) ... ERROR
     test_anyValue (tests.SessionURLs) ... ok
-    See Protocol.test_simpleSession for explanation. ... ok
     test_invalidPaths (tests.SessionURLs) ... ok
     test_broken_json (tests.WebsocketHixie76) ... ERROR
     test_close (tests.WebsocketHixie76) ... ERROR
@@ -73,18 +73,17 @@ Test Status:
     test_httpMethod (tests.WebsocketHttpErrors) ... FAIL
     test_invalidConnectionHeader (tests.WebsocketHttpErrors) ... FAIL
     test_invalidMethod (tests.WebsocketHttpErrors) ... FAIL
-    r = GET(base_url + '/0/0/websocket', {'Upgrade': 'WebSocket', ... ok
     test_broken_json (tests.WebsocketHybi10) ... ERROR
     test_close (tests.WebsocketHybi10) ... ERROR
     test_firefox_602_connection_header (tests.WebsocketHybi10) ... FAIL
     test_headersSanity (tests.WebsocketHybi10) ... FAIL
     test_transport (tests.WebsocketHybi10) ... ERROR
-    test_content_types (tests.XhrPolling) ... FAIL
-    test_invalid_json (tests.XhrPolling) ... FAIL
-    test_invalid_session (tests.XhrPolling) ... FAIL
-    test_jsessionid (tests.XhrPolling) ... ERROR
-    test_options (tests.XhrPolling) ... FAIL
-    test_transport (tests.XhrPolling) ... FAIL
-    test_options (tests.XhrStreaming) ... FAIL
+    test_content_types (tests.XhrPolling) ... ok
+    test_invalid_json (tests.XhrPolling) ... ok
+    test_invalid_session (tests.XhrPolling) ... ok
+    test_jsessionid (tests.XhrPolling) ... ok
+    test_options (tests.XhrPolling) ... ok
+    test_transport (tests.XhrPolling) ... ok
+    test_options (tests.XhrStreaming) ... ok
     test_response_limit (tests.XhrStreaming) ... FAIL
     test_transport (tests.XhrStreaming) ... FAIL
