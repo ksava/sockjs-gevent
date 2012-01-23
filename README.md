@@ -51,18 +51,18 @@ Test Status:
     test_disabled_websocket (tests.InfoTest) ... ok
     test_entropy (tests.InfoTest) ... ok
     test_options (tests.InfoTest) ... ok
-    test_xhr_server_decodes (tests.JSONEncoding) ... ERROR
-    test_xhr_server_encodes (tests.JSONEncoding) ... ERROR
+    test_xhr_server_decodes (tests.JSONEncoding) ... ok
+    test_xhr_server_encodes (tests.JSONEncoding) ... FAIL
     test_content_types (tests.JsonPolling) ... FAIL
     test_invalid_json (tests.JsonPolling) ... FAIL
     test_no_callback (tests.JsonPolling) ... FAIL
     test_transport (tests.JsonPolling) ... FAIL
     test_closeSession (tests.Protocol) ... FAIL
-    test_simpleSession (tests.Protocol) ... ERROR
+    test_simpleSession (tests.Protocol) ... ok
     test_close (tests.RawWebsocket) ... ERROR
     test_transport (tests.RawWebsocket) ... ERROR
-    test_anyValue (tests.SessionURLs) ... ERROR
-    See Protocol.test_simpleSession for explanation. ... ERROR
+    test_anyValue (tests.SessionURLs) ... ok
+    See Protocol.test_simpleSession for explanation. ... ok
     test_invalidPaths (tests.SessionURLs) ... ok
     test_broken_json (tests.WebsocketHixie76) ... ERROR
     test_close (tests.WebsocketHixie76) ... ERROR
@@ -79,12 +79,12 @@ Test Status:
     test_firefox_602_connection_header (tests.WebsocketHybi10) ... FAIL
     test_headersSanity (tests.WebsocketHybi10) ... FAIL
     test_transport (tests.WebsocketHybi10) ... ERROR
-    test_content_types (tests.XhrPolling) ... ERROR
-    test_invalid_json (tests.XhrPolling) ... ERROR
+    test_content_types (tests.XhrPolling) ... FAIL
+    test_invalid_json (tests.XhrPolling) ... FAIL
     test_invalid_session (tests.XhrPolling) ... FAIL
     test_jsessionid (tests.XhrPolling) ... ERROR
-    test_options (tests.XhrPolling) ... ERROR
-    test_transport (tests.XhrPolling) ... ERROR
+    test_options (tests.XhrPolling) ... FAIL
+    test_transport (tests.XhrPolling) ... FAIL
     test_options (tests.XhrStreaming) ... FAIL
     test_response_limit (tests.XhrStreaming) ... FAIL
     test_transport (tests.XhrStreaming) ... FAIL

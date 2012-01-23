@@ -40,37 +40,38 @@ static_routes = RegexRouter({
     r'iframe[0-9-.a-z_]*.html' : static.IFrameHandler,
 })
 
+
 dynamic_routes = {
 
      # Ajax Tranports
      # ==============
     'xhr'           : transports.XHRPolling,
     'xhr_send'      : transports.XHRSend,
-    'xhr_streaming' : transports.XHRSend,
+    'xhr_streaming' : transports.XHRStreaming,
     'jsonp'         : transports.JSONPolling,
     'jsonp_send'    : transports.JSONPolling,
 
     # WebSockets
     # ===============
-    'websocket'    : transports.WebSocket,
+    'websocket'     : transports.WebSocket,
 
     # File Transports
     # ===============
-    'eventsource'   : transports.HTMLFile,
+    'eventsource'   : transports.EventSource,
     'htmlfile'      : transports.HTMLFile,
     'iframe'        : transports.IFrame,
 }
 
-class SockJSRoute(object):
-
+class SockJSConnection(object):
 
     disallowed_transports = tuple()
 
-    def __init__(self):
-        self.disallowed = set(self.disallowed_transports)
+    def __init__(self, session):
+        self.session = session
 
-    def transport_allowed(self, transport):
-        return transport not in self.disallowed
+    @classmethod
+    def transport_allowed(cls, transport):
+        return transport not in cls.disallowed_transports
 
     # Event Callbacks
     # ===============
@@ -114,8 +115,8 @@ class SockJSRouter(object):
         Set up the routing table for the specific routes attached
         to this server.
         """
-        for route, server in applications.iteritems():
-            self.routes[route] = server()
+        for route, connection in applications.iteritems():
+            self.routes[route] = connection
 
     def route_static(self, route, suffix):
         try:
@@ -137,7 +138,7 @@ class SockJSRouter(object):
         """
 
         try:
-            route_handle = self.routes[route]
+            conn_cls = self.routes[route]
         except:
             raise Http500('No such route')
 
@@ -146,18 +147,26 @@ class SockJSRouter(object):
         except:
             raise Http500('No such transport')
 
+        if transport_cls.direction == 'send':
+            create_if_null = False
+        elif transport_cls.direction == 'recv':
+            create_if_null = True
+
         session = self.server.get_session(session_uid, \
-            create_if_null=True)
+            create_if_null)
+
+        if not session:
+            raise Http404('No such session')
 
         # Initialize the transport and call, any side-effectful
         # code is the __init__ method, the communication is
         # invoked by __call__ method.
 
-        downlink = transport_cls(session, route_handle)
-        downlink.on_message = route_handle.on_message
+        conn = conn_cls(session)
+        downlink = transport_cls(session, conn)
 
         if session.is_new:
-            route_handle.on_open(session)
-            session.timeout.rawlink(route_handle.on_close)
+            conn.on_open(session)
+            session.timeout.rawlink(conn.on_close)
 
         return downlink

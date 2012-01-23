@@ -1,6 +1,6 @@
 import session
 from handler import SockJSHandler
-from router import SockJSRoute, SockJSRouter
+from router import SockJSRouter, SockJSConnection
 from sessionpool import SessionPool
 
 from gevent.pywsgi import WSGIServer
@@ -15,9 +15,14 @@ class SockJSServer(WSGIServer):
 
         super(SockJSServer, self).__init__(*args, **kwargs)
         self.session_pool = SessionPool()
+        self.session_pool.start_gc()
 
         # hack to get the server inside the router
         self.application.server = self
+
+    def kill(self):
+        super(SockJSServer, self).kill()
+        self.session_pool.shudown()
 
     def del_session(self, uid):
         del self.sessions[uid]
@@ -38,7 +43,6 @@ class SockJSServer(WSGIServer):
         if create_if_null and session is None:
             session = self.session_backend(self, session_id)
             self.session_pool.add(session)
-
         elif session:
             session.incr_hits()
 
@@ -50,13 +54,13 @@ def devel_server():
     development.
     """
 
-    class EchoRoute(SockJSRoute):
+    class Echo(SockJSConnection):
 
         def on_message(self, message):
             pass
             #self.send(message)
 
-    class DisabledWebsocket(SockJSRoute):
+    class DisabledWebsocket(SockJSConnection):
 
         disallowed_transports = ('websocket',)
 
@@ -74,7 +78,7 @@ def devel_server():
     def runServer(*args):
 
         router = SockJSRouter({
-            'echo': EchoRoute,
+            'echo': Echo,
             'disabled_websocket_echo': DisabledWebsocket,
         })
 

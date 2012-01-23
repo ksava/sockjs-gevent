@@ -5,9 +5,9 @@ import protocol
 
 class BaseTransport(object):
 
-    def __init__(self, session, route):
+    def __init__(self, session, conn):
         self.session = session
-        self.route = route
+        self.conn = conn
 
     def encode(self, data):
         return protocol.encode(data)
@@ -30,17 +30,18 @@ class BaseTransport(object):
 # taken per protocol.
 
 class XHRSend(BaseTransport):
-    direction = 'recv'
+    direction = 'send'
 
     def __call__(self, handler, request_method, raw_request_data):
         messages = self.decode(raw_request_data)
+        #self.on_message(messages)
 
         for msg in messages:
             self.session.add_message(messages)
 
-        self.handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
-        self.handler.start_response("204 NO CONTENT", [])
-        self.handler.write_nothing()
+        handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
+        handler.start_response("204 NO CONTENT", [])
+        handler.write_nothing()
 
         return []
 
@@ -68,6 +69,7 @@ class PollingTransport(BaseTransport):
     Subclasses overload the write_frame method for their
     respective serialization methods.
     """
+    direction = 'recv'
 
     TIMING = 5.0
 
@@ -135,6 +137,8 @@ class PollingTransport(BaseTransport):
 
 class XHRPolling(PollingTransport):
 
+    direction = 'recv'
+
     TIMING = 2
     content_type = ("Content-Type", "text/html; charset=UTF-8")
 
@@ -155,20 +159,26 @@ class XHRPolling(PollingTransport):
             ("Connection", "close"),
             self.content_type,
         ])
-        self.on_message(messages)
 
         handler.write_text(protocol.message_frame(messages))
 
     def __call__(self, handler, request_method, raw_request_data):
         """
-        joinall in the parent
+        On the first poll, send back the open frame, one
+        subsequent calls actually poll the queue.
         """
-        return [gevent.spawn(self.poll, handler)]
+        if self.session.is_new():
+            handler.write_text(protocol.OPEN)
+            return []
+        else:
+            return [gevent.spawn(self.poll, handler)]
 
 class XHRStreaming(PollingTransport):
+    direction = 'recv'
     pass
 
 class JSONPolling(PollingTransport):
+    direction = 'recv'
     pass
 
 class HTMLFile(BaseTransport):

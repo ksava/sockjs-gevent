@@ -13,7 +13,9 @@ class Session(object):
     Subclasses are expected to overload the add_message and
     get_messages to reflect their storage system.
     """
-    expires = timedelta(seconds=1)
+
+    # Session's timeout after 5 seconds
+    expires = timedelta(seconds=5)
 
     def __init__(self, server, session_id=None):
         self.expires_at = datetime.now() + self.expires
@@ -59,11 +61,6 @@ class Session(object):
 
     def incr_hits(self):
         self.hits += 1
-
-        if self.hits > 0:
-            self.connected = True
-
-        self.persist()
 
     def is_new(self):
         return self.hits == 0
@@ -117,7 +114,7 @@ class MemorySession(Session):
         self.hits = 0
         self.heartbeats = 0
         self.connected = False
-        
+
         # Async event, use rawlink to string callbacks
         self.timeout = Event()
 
@@ -125,6 +122,7 @@ class MemorySession(Session):
         self.queue.put_nowait(msg)
 
     def get_messages(self, **kwargs):
+        self.incr_hits()
         return self.queue.get(**kwargs)
 
     def kill(self):

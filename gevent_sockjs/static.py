@@ -4,22 +4,22 @@ import protocol
 from errors import *
 
 class Greeting():
-    def __init__(self, route):
-        self.route = route
+    def __init__(self, conn_cls):
+        self.conn_cls = conn_cls
 
     def __call__(self, handler, request_method, raw_request_data):
         handler.greeting()
 
 class InfoHandler():
-    def __init__(self, route):
-        self.route = route
+    def __init__(self, conn_cls):
+        self.conn_cls = conn_cls
 
     def __call__(self, handler, request_method, raw_request_data):
 
         if request_method == 'GET':
             entropy = random.randint(1, 2**32)
 
-            has_ws = self.route.transport_allowed('websocket')
+            has_ws = self.conn_cls.transport_allowed('websocket')
 
             handler.enable_nocache()
             handler.enable_cors()
@@ -29,7 +29,7 @@ class InfoHandler():
                 'websocket'     : has_ws,
                 'origins'       : ['*:*'],
                 'entropy'       : entropy,
-                'route'         : self.route.__class__.__name__
+                'route'         : self.conn_cls.__name__
             })
 
         elif request_method == 'OPTIONS':
@@ -42,8 +42,8 @@ class IFrameHandler():
 
     def __call__(self, handler, request_method, raw_request_data):
 
-        #if request_method != 'GET':
-            #raise Http404()
+        if request_method != 'GET':
+            raise Http405()
 
         cached = handler.environ.get('HTTP_IF_NONE_MATCH')
 

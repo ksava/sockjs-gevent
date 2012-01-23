@@ -49,7 +49,7 @@ class SessionPool(object):
         """
         Get active sessions by their session id.
         """
-        session = self.sessions.get(session_id, None)
+        return self.sessions.get(session_id, None)
 
     def remove(self, session_id):
         session = self.sessions.get(session_id, None)
@@ -65,6 +65,7 @@ class SessionPool(object):
         while self.pool:
             head = heappop(self.pool)
             head.expired = True
+            head.timeout.set()
 
     def __del__(self):
         """
