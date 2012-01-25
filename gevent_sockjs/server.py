@@ -57,7 +57,7 @@ def devel_server():
     class Echo(SockJSConnection):
 
         def on_message(self, message):
-            pass
+            self.send(message)
 
     class DisabledWebsocket(SockJSConnection):
 
@@ -71,7 +71,7 @@ def devel_server():
         disallowed_transports = ()
 
         def on_open(self, session):
-            session.kill()
+            self.close()
 
         def on_message(self, message):
             pass

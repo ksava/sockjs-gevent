@@ -75,8 +75,11 @@ def encode(message):
     """
     Python to JSON
     """
+    # TODO: actually deal with the nuances of escaping and
+    # unicode
     if isinstance(message, basestring):
-        msg = message
+        # Don't both calling json, since its simple
+        msg = '["' + message + '"]'
     elif isinstance(message, (object, dict, list)):
         msg = json.dumps(message)
     else:

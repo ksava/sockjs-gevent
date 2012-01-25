@@ -36,8 +36,7 @@ class XHRSend(BaseTransport):
         messages = self.decode(raw_request_data)
 
         for msg in messages:
-            #self.conn.on_message(msg)
-            self.session.add_message(messages)
+            self.conn.on_message(msg)
 
         handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
         handler.start_response("204 NO CONTENT", [])
