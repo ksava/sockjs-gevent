@@ -167,6 +167,6 @@ class SockJSRouter(object):
 
         if session.is_new:
             conn.on_open(session)
-            session.timeout.rawlink(conn.on_close)
+            session.timeout.rawlink(lambda g: conn.on_close())
 
         return downlink

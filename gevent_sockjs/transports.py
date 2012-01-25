@@ -172,6 +172,10 @@ class XHRPolling(PollingTransport):
         if self.session.is_new():
             handler.write_text(protocol.OPEN)
             return []
+        elif self.session.is_expired():
+            close_error = protocol.close_frame(3000, "Go away!")
+            handler.write_text(close_error)
+            return []
         elif self.session.is_locked():
             lock_error = protocol.close_frame(2010, "Another connection still open")
             handler.write_text(lock_error)

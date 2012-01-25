@@ -58,11 +58,20 @@ def devel_server():
 
         def on_message(self, message):
             pass
-            #self.send(message)
 
     class DisabledWebsocket(SockJSConnection):
 
         disallowed_transports = ('websocket',)
+
+        def on_message(self, message):
+            pass
+
+    class Close(SockJSConnection):
+
+        disallowed_transports = ()
+
+        def on_open(self, session):
+            session.kill()
 
         def on_message(self, message):
             pass
@@ -79,6 +88,7 @@ def devel_server():
 
         router = SockJSRouter({
             'echo': Echo,
+            'close': Close,
             'disabled_websocket_echo': DisabledWebsocket,
         })
 

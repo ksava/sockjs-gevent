@@ -58,7 +58,7 @@ Test Status:
     test_invalid_json (tests.JsonPolling) ... FAIL
     test_no_callback (tests.JsonPolling) ... FAIL
     test_transport (tests.JsonPolling) ... FAIL
-    test_closeSession (tests.Protocol) ... FAIL
+    test_closeSession (tests.Protocol) ... ok
     test_simpleSession (tests.Protocol) ... ok
     test_close (tests.RawWebsocket) ... ERROR
     test_transport (tests.RawWebsocket) ... ERROR

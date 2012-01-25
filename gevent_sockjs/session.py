@@ -87,6 +87,9 @@ class Session(object):
     def is_locked(self):
         return self.locked.is_set()
 
+    def is_expired(self):
+        return self.expired
+
     def lock(self):
         self.locked.set()
 
@@ -123,9 +126,9 @@ class MemorySession(Session):
         return self.queue.get(**kwargs)
 
     def kill(self):
-        if self.connected:
-            self.connected = False
+        self.connected = False
+
+        # Expire only once
+        if not self.expired:
             self.expired = True
             self.timeout.set()
-        else:
-            pass
