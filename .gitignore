@@ -1,4 +1,7 @@
 *~
 *.swp
+*.swo
 *.pyc
 *.egg-info
+*,cover
+.coverage
