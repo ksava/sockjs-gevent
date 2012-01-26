@@ -87,3 +87,21 @@ Test Status:
     test_options (tests.XhrStreaming) ... ok
     test_response_limit (tests.XhrStreaming) ... FAIL
     test_transport (tests.XhrStreaming) ... FAIL
+
+Test Coverage
+=============
+
+    Name                        Stmts   Miss  Cover
+    -----------------------------------------------
+    gevent_sockjs/errors           21     13    38%
+    gevent_sockjs/handler         144    116    19%
+    gevent_sockjs/protocol         56     26    54%
+    gevent_sockjs/router           84     51    39%
+    gevent_sockjs/server           53     25    53%
+    gevent_sockjs/session          73     45    38%
+    gevent_sockjs/sessionpool      58     42    28%
+    gevent_sockjs/static           37     25    32%
+    gevent_sockjs/transports       82     43    48%
+    -----------------------------------------------
+    TOTAL                         608    386    37%
+

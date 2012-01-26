@@ -86,49 +86,6 @@ class PollingTransport(BaseTransport):
         ])
         self.handler.write_text('')
 
-    def get(self, session, action):
-        """
-        Spin lock the thread until we have a message on the
-        gevent queue.
-        """
-        try:
-            messages = session.get_messages(timeout=self.TIMING)
-            messages = self.encode(messages)
-        except Empty:
-            messages = "[]"
-
-        self.start_response("200 OK", [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Connection", "close"),
-            self.content_type,
-        ])
-
-        self.write(protocol.message_frame(messages))
-
-    def connect(self, session, request_method, action):
-        """
-        Initial starting point for this handler's thread,
-        delegates to another method depending on the session,
-        request method, and action.
-        """
-        if session.is_new():
-            #self.write(protocol.OPEN)
-            self.handler.write_text(protocol.OPEN)
-            return
-
-        if request_method == "GET":
-            session.clear_disconnect_timeout();
-            self.get(session, action)
-
-        elif request_method == "POST":
-            return self.post(session, action)
-
-        elif request_method == "OPTIONS":
-            return self.options()
-
-        else:
-            raise Exception("No support for such method: " + request_method)
-
 # Polling Transports
 # ==================
 #
