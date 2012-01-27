@@ -67,7 +67,7 @@ Test Status:
     test_broken_json (tests.WebsocketHixie76) ... FAIL
     test_close (tests.WebsocketHixie76) ... ok
     test_empty_frame (tests.WebsocketHixie76) ... FAIL
-    test_headersSanity (tests.WebsocketHixie76) ... FAIL
+    test_headersSanity (tests.WebsocketHixie76) ... ok
     test_reuseSessionId (tests.WebsocketHixie76) ... FAIL
     test_transport (tests.WebsocketHixie76) ... ERROR
     test_httpMethod (tests.WebsocketHttpErrors) ... ok
