@@ -149,8 +149,10 @@ class SockJSRouter(object):
 
         if transport_cls.direction == 'send':
             create_if_null = False
-        elif transport_cls.direction == 'recv':
+        elif transport_cls.direction in ('recv', 'bi'):
             create_if_null = True
+        else:
+            raise Exception('Could not determine direction')
 
         session = self.server.get_session(session_uid, \
             create_if_null)
@@ -170,3 +172,6 @@ class SockJSRouter(object):
             session.timeout.rawlink(lambda g: conn.on_close())
 
         return downlink
+
+    def __call__(self, environ, start_response):
+        raise NotImplemented()

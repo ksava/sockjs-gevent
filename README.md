@@ -21,8 +21,8 @@ To run tests
 Will create a `sockjs` virtualenv in either your WORKON_HOME or in
 the currrent directory if you don't have virtualenvwrapper.
 
-    make
-    nosetests sockjs-protocol-0.2.py
+    make tests/Makefile
+    setup.py test
 
 Or manually:
 
@@ -64,20 +64,21 @@ Test Status:
     test_transport (tests.RawWebsocket) ... ERROR
     test_anyValue (tests.SessionURLs) ... ok
     test_invalidPaths (tests.SessionURLs) ... ok
-    test_broken_json (tests.WebsocketHixie76) ... ERROR
-    test_close (tests.WebsocketHixie76) ... ERROR
-    test_empty_frame (tests.WebsocketHixie76) ... ERROR
+    test_broken_json (tests.WebsocketHixie76) ... FAIL
+    test_close (tests.WebsocketHixie76) ... ok
+    test_empty_frame (tests.WebsocketHixie76) ... FAIL
     test_headersSanity (tests.WebsocketHixie76) ... FAIL
-    test_reuseSessionId (tests.WebsocketHixie76) ... ERROR
+    test_reuseSessionId (tests.WebsocketHixie76) ... FAIL
     test_transport (tests.WebsocketHixie76) ... ERROR
-    test_httpMethod (tests.WebsocketHttpErrors) ... FAIL
-    test_invalidConnectionHeader (tests.WebsocketHttpErrors) ... FAIL
-    test_invalidMethod (tests.WebsocketHttpErrors) ... FAIL
-    test_broken_json (tests.WebsocketHybi10) ... ERROR
-    test_close (tests.WebsocketHybi10) ... ERROR
-    test_firefox_602_connection_header (tests.WebsocketHybi10) ... FAIL
-    test_headersSanity (tests.WebsocketHybi10) ... FAIL
-    test_transport (tests.WebsocketHybi10) ... ERROR
+    test_httpMethod (tests.WebsocketHttpErrors) ... ok
+    test_invalidConnectionHeader (tests.WebsocketHttpErrors) ...  ok
+    test_invalidMethod (tests.WebsocketHttpErrors) ... ok
+    test_verifyOrigin (test_protocol.WebsocketHttpErrors) ... ok
+    test_broken_json (tests.WebsocketHybi10) ... FAIL
+    test_close (tests.WebsocketHybi10) ... ok
+    test_firefox_602_connection_header (tests.WebsocketHybi10) ... ok
+    test_headersSanity (tests.WebsocketHybi10) ... ok
+    test_transport (tests.WebsocketHybi10) ... FAIL
     test_content_types (tests.XhrPolling) ... ok
     test_invalid_json (tests.XhrPolling) ... ok
     test_invalid_session (tests.XhrPolling) ... ok
@@ -94,14 +95,13 @@ Test Coverage
     Name                        Stmts   Miss  Cover
     -----------------------------------------------
     gevent_sockjs/errors           21     13    38%
-    gevent_sockjs/handler         144    116    19%
+    gevent_sockjs/handler         211    175    17%
     gevent_sockjs/protocol         56     26    54%
-    gevent_sockjs/router           84     51    39%
+    gevent_sockjs/router           87     53    39%
     gevent_sockjs/server           53     25    53%
     gevent_sockjs/session          73     45    38%
     gevent_sockjs/sessionpool      58     42    28%
     gevent_sockjs/static           37     25    32%
-    gevent_sockjs/transports       82     43    48%
+    gevent_sockjs/transports      102     62    39%
     -----------------------------------------------
-    TOTAL                         608    386    37%
-
+    TOTAL                         698    466    33%

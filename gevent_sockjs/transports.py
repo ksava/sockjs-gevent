@@ -142,20 +142,71 @@ class XHRPolling(PollingTransport):
 
 class XHRStreaming(PollingTransport):
     direction = 'recv'
-    pass
 
 class JSONPolling(PollingTransport):
     direction = 'recv'
-    pass
 
 class HTMLFile(BaseTransport):
-    pass
+    direction = 'recv'
 
 class IFrame(BaseTransport):
-    pass
+    direction = 'reccv'
 
 class EventSource(BaseTransport):
-    pass
+    direction = 'send'
 
 class WebSocket(BaseTransport):
-    pass
+    direction = 'bi'
+
+    def poll(self, socket):
+        """
+        Spin lock the thread until we have a message on the
+        gevent queue.
+        """
+
+        while not self.session.expired:
+            messages = self.session.get_messages()
+            messages = self.encode(messages)
+
+            socket.send(protocol.message_frame(messages))
+
+        close_error = protocol.close_frame(3000, "Go away!")
+        socket.send(close_error)
+
+        # Session expires, so unlock
+        #self.session.unlock()
+
+    def put(self, socket):
+
+        while not self.session.expired:
+            messages = socket.receive()
+
+            for msg in messages:
+                self.session.add_message(msg)
+
+            self.session.incr_hits()
+
+        # Session expires, so unlock
+        #self.session.unlock()
+
+    def __call__(self, socket, request_method, raw_request_data):
+
+        socket.send('o')
+
+        if self.session.is_expired():
+            close_error = protocol.close_frame(3000, "Go away!")
+            socket.send(close_error)
+            socket.close()
+            return []
+        #elif self.session.is_locked():
+            #lock_error = protocol.close_frame(2010, "Another connection still open")
+            #socket.send(lock_error)
+            #socket.close()
+            #return []
+
+        # Otherwise spin our threads.
+        self.session.lock()
+        return [
+            gevent.spawn(self.poll, socket),
+            gevent.spawn(self.put, socket),
+        ]

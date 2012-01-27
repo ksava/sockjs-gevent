@@ -1,4 +1,6 @@
 unittest2
 nose==1.1.2
 -e git+https://github.com/liris/websocket-client.git#egg=websocket
+
+# See https://github.com/Lawouach/WebSocket-for-Python/issues/16
 -e git+https://github.com/majek/WebSocket-for-Python.git#egg=ws4py

@@ -1,3 +1,5 @@
--e git+https://github.com/majek/WebSocket-for-Python.git#egg=ws4py
 nose==1.1.2
 Werkzeug==0.8.2
+
+# See https://github.com/Lawouach/WebSocket-for-Python/issues/16
+https://github.com/Lawouach/WebSocket-for-Python/issues/16

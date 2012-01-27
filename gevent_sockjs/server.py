@@ -6,6 +6,9 @@ from sessionpool import SessionPool
 from gevent.pywsgi import WSGIServer
 
 class SockJSServer(WSGIServer):
+    """
+    The base SockJS server, subclases gevent.pywsgi.WSGIServer
+    """
 
     session_backend = session.MemorySession
     handler_class = SockJSHandler

@@ -3,15 +3,117 @@ import re
 import datetime
 import time
 import traceback
-import random
 
 import gevent
 from gevent.pywsgi import WSGIHandler
+from geventwebsocket.handler import WebSocketHandler
 from Cookie import SimpleCookie
 
 import protocol
 
 from errors import Http404, Http500
+
+# A websocket related call, used for routing to specific handlers
+# because of the special nature of websockets existing outside of
+# the normal WSGI behavior.
+
+class WSHandler(WebSocketHandler):
+
+    def prep_response(self):
+        """
+        The default headers.
+        """
+        self.time_start = time.time()
+        self.status = None
+
+        self.headers = []
+        self.headers_sent = False
+
+        self.result = None
+        self.response_use_chunked = False
+        self.response_length = 0
+
+    def bad_request(self):
+        """
+        Sent if we have invaild Connection headers
+        """
+        self.prep_response()
+        self.start_response('400 BAD REQUEST', [
+            ("Content-Type", "text/plain; charset=UTF-8")
+        ])
+        self.result = ['Can "Upgrade" only to "WebSocket".']
+        self.process_result()
+
+    def not_allowed(self):
+        self.prep_response()
+        self.start_response('405 NOT ALLOWED', [('allow', True)])
+        self.result = []
+        self.process_result()
+
+    def handle_one_response(self):
+        self.pre_start()
+        environ = self.environ
+        upgrade = environ.get('HTTP_UPGRADE', '').lower()
+        meth = self.environ.get('REQUEST_METHOD')
+
+        if meth != 'GET':
+            return self.not_allowed()
+
+        # Upgrade the connect if we have the proper headers
+        if upgrade == 'websocket':
+            connection = environ.get('HTTP_CONNECTION', '').lower()
+            if 'upgrade' in connection:
+                return self._handle_websocket()
+
+        # Malformed request
+        self.bad_request()
+
+    def _handle_websocket(self):
+        environ = self.environ
+        try:
+            try:
+                if environ.get("HTTP_SEC_WEBSOCKET_VERSION"):
+                    result = self._handle_hybi()
+                elif environ.get("HTTP_ORIGIN"):
+                    result = self._handle_hixie()
+            except:
+                self.close_connection = True
+                raise
+            self.result = []
+            if not result:
+                return
+            self.route(environ, None)
+            return []
+        finally:
+            self.log_request()
+
+    def route(self, environ, start_response):
+        """
+        Route the websocket pipe to its transport handler. Logic
+        is more or less identical to HTTP logic instead of
+        exposing the WSGI handler we expose the socket.
+        """
+        self.router = self.server.application
+
+        websocket = environ.get('wsgi.websocket')
+        meth = environ.get("REQUEST_METHOD")
+
+        route       = self.tokens['route']
+        session_uid = self.tokens['session_id']
+        server      = self.tokens['server_id']
+        transport   = self.tokens['transport']
+
+        self.wsgi_input._discard()
+
+        downlink = self.router.route_dynamic(
+            route,
+            session_uid,
+            server,
+            transport
+        )
+
+        threads = downlink(websocket, None, None)
+        gevent.joinall(threads)
 
 class SockJSHandler(WSGIHandler):
     """
@@ -192,6 +294,18 @@ class SockJSHandler(WSGIHandler):
             ('access-control-max-age', int(s)),
         ]
 
+    def handle_websocket(self, tokens):
+        handle = WSHandler(
+            self.socket,
+            self.client_address,
+            self.server,
+            self.rfile,
+        )
+        handle.tokens = tokens
+        handle.__dict__.update(self.__dict__)
+
+        return handle.handle_one_response()
+
     def handle_one_response(self):
         path = self.environ.get('PATH_INFO')
         meth = self.environ.get("REQUEST_METHOD")
@@ -230,6 +344,9 @@ class SockJSHandler(WSGIHandler):
             session_uid = tokens['session_id']
             server      = tokens['server_id']
             transport   = tokens['transport']
+
+            if transport == 'websocket':
+                return self.handle_websocket(tokens)
 
             try:
                 # Router determines the downlink route as a
