@@ -1,3 +1,5 @@
+import time
+import socket
 import gevent
 from gevent.queue import Empty
 
@@ -143,6 +145,96 @@ class XHRPolling(PollingTransport):
 class XHRStreaming(PollingTransport):
     direction = 'recv'
 
+    TIMING = 2
+
+    def poll(self, handler):
+        """
+        Spin lock the thread until we have a message on the
+        gevent queue.
+        """
+
+        while True:
+            try:
+                messages = self.session.get_messages(timeout=self.TIMING)
+                messages = self.encode(messages)
+            except Empty:
+                messages = "[]"
+
+            handler.result.append(protocol.message_frame(messages))
+            handler.write(protocol.message_frame(messages))
+
+            if handler.response_length > 1024:
+                handler.time_finish = time.time()
+                handler.log_request()
+                break
+
+    def stream(self, handler):
+        content_type = ("Content-Type", "application/javascript; charset=UTF-8")
+
+        prelude = 'h' *  2048 + '\n'
+
+        handler.enable_cookie()
+        handler.enable_cors()
+
+        # https://groups.google.com/forum/#!msg/sockjs/bl3af2zqc0A/w-o3OK3LKi8J
+        if handler.request_version == 'HTTP/1.1':
+
+            handler.headers += [
+                content_type,
+                ("Transfer-Encoding", "chunked"),
+                ('Connection', 'keep-alive'),
+            ]
+
+        elif handler.request_version == 'HTTP/1.0':
+
+            handler.headers += [
+                content_type,
+                ('Connection', 'close'),
+            ]
+
+        # Use very low level api here, since we want mor granulra
+        # control over our response
+
+        handler.start_response("200 OK", handler.headers)
+
+        headers = handler.raw_headers()
+
+        try:
+            writer = handler.socket.makefile()
+            writer.write(headers)
+            writer.flush()
+            #print headers
+
+            prelude_chunk = handler.raw_chunk(prelude)
+
+            writer.write(handler.raw_chunk(prelude))
+            writer.flush()
+            #print prelude_chunk
+
+            open_chunk = handler.raw_chunk('o\n')
+
+            writer.write(open_chunk)
+            writer.flush()
+            #print open_chunk
+
+            zero_chunk = handler.raw_chunk('')
+            writer.write(zero_chunk)
+            # Peer will close as a result
+
+            writer.flush()
+            #print zero_chunk
+
+        except socket.error:
+            handler.socket.shutdown(1)
+            self.session.expire()
+
+    def __call__(self, handler, request_method, raw_request_data):
+        """
+        """
+        return [
+            gevent.spawn(self.stream, handler),
+        ]
+
 class JSONPolling(PollingTransport):
     direction = 'recv'
 
@@ -150,7 +242,7 @@ class HTMLFile(BaseTransport):
     direction = 'recv'
 
 class IFrame(BaseTransport):
-    direction = 'reccv'
+    direction = 'recv'
 
 class EventSource(BaseTransport):
     direction = 'send'

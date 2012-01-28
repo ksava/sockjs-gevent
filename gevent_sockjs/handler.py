@@ -150,6 +150,27 @@ class SockJSHandler(WSGIHandler):
         self.response_use_chunked = False
         self.response_length = 0
 
+    def raw_headers(self):
+        """
+        Return the available headers as a string, used for low
+        level socket handeling.
+        """
+
+        head = []
+
+        # Protocol, status line
+        head.append('%s %s\r\n' % (self.request_version, self.status))
+        for header in self.response_headers:
+            head.append('%s: %s\r\n' % header)
+        head.append('\r\n')
+        return ''.join(head)
+
+    def raw_chunk(self, data):
+        """
+        Returna a raw HTTP chunk, hex encoded size.
+        """
+        return "%x\r\n%s\r\n" % (len(data), data)
+
     def write_text(self, text):
         self.prep_response()
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
