@@ -146,7 +146,6 @@ class SockJSRouter(object):
         try:
             transport_cls = dynamic_routes[transport]
         except:
-            import pdb; pdb.set_trace()
             raise Http500('No such transport')
 
         if transport_cls.direction == 'send':
