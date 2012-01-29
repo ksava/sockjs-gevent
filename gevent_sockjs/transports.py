@@ -6,6 +6,8 @@ import urlparse
 import protocol
 from errors import *
 
+from geventwebsocket.websocket import Closed
+
 class BaseTransport(object):
 
     def __init__(self, session, conn):
@@ -359,12 +361,18 @@ class WebSocket(BaseTransport):
         socket.send(close_error)
 
         # Session expires, so unlock
-        #self.session.unlock()
+        self.session.unlock()
 
     def put(self, socket):
 
         while not self.session.is_expired():
             messages = socket.receive() # blocking
+
+            # Hybi = Closed
+            # Hixie = None
+
+            if isinstance(messages, Closed) or messages is None:
+                break
 
             try:
                 messages = protocol.decode(messages)
@@ -378,7 +386,10 @@ class WebSocket(BaseTransport):
             self.session.incr_hits()
 
         # Session expires, so unlock
-        #self.session.unlock()
+
+        socket.close()
+        self.session.unlock()
+        self.session.expire()
 
     def __call__(self, socket, request_method, raw_request_data):
 
@@ -405,15 +416,12 @@ class RawWebSocket(BaseTransport):
     direction = 'bi'
 
     def poll(self, socket):
-        """
-        Spin lock the thread until we have a message on the
-        gevent queue.
-        """
 
-        while not self.session.expired:
+        while not self.session.is_expired():
             messages = self.session.get_messages()
 
-            socket.send(messages + '\uffff')
+            for message in messages:
+                socket.send(message)
 
         socket.close()
 
@@ -424,9 +432,15 @@ class RawWebSocket(BaseTransport):
             # wants.
 
             message = socket.receive() # blocking
-            self.session.add_message(message)
+
+            if isinstance(message, Closed) or message is None:
+                break
+
+            self.conn.on_message([message])
 
             self.session.incr_hits()
+
+        socket.close()
 
     def __call__(self, socket, request_method, raw_request_data):
 
