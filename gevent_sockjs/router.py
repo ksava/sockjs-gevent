@@ -49,7 +49,7 @@ dynamic_routes = {
     'xhr_send'      : transports.XHRSend,
     'xhr_streaming' : transports.XHRStreaming,
     'jsonp'         : transports.JSONPolling,
-    'jsonp_send'    : transports.JSONPolling,
+    'jsonp_send'    : transports.JSONPSend,
 
     # WebSockets
     # ===============

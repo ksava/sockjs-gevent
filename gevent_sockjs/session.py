@@ -1,6 +1,6 @@
 import uuid
 
-from gevent.queue import Queue
+from gevent.queue import Queue, Empty
 from gevent.event import Event
 
 from datetime import datetime, timedelta
@@ -123,7 +123,19 @@ class MemorySession(Session):
 
     def get_messages(self, **kwargs):
         self.incr_hits()
-        return self.queue.get(**kwargs)
+
+        if self.queue.empty():
+            try:
+                return self.queue.get(**kwargs)
+            except Empty:
+                return []
+        else:
+            accum = []
+            try:
+                while not self.queue.empty():
+                    accum.append(self.queue.get_nowait())
+            finally:
+                return accum
 
     def kill(self):
         self.connected = False

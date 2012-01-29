@@ -1,3 +1,6 @@
+class InvalidJSON(Exception):
+    pass
+
 class Http404(Exception):
 
     def __init__(self, message=None):

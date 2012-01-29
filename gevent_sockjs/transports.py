@@ -1,9 +1,11 @@
 import time
 import socket
 import gevent
-from gevent.queue import Empty
+import urllib2
+import urlparse
 
 import protocol
+from errors import *
 
 class BaseTransport(object):
 
@@ -35,13 +37,29 @@ class XHRSend(BaseTransport):
     direction = 'send'
 
     def __call__(self, handler, request_method, raw_request_data):
-        messages = self.decode(raw_request_data)
+
+        if request_method == 'OPTIONS':
+            handler.write_options(['OPTIONS', 'POST'])
+            return []
+
+        if raw_request_data == '':
+            handler.do500(message='Payload expected.')
+            return
+
+        try:
+            messages = self.decode(raw_request_data)
+        except InvalidJSON:
+            handler.do500(message='Broken JSON encoding.')
+            return
 
         for msg in messages:
             self.conn.on_message(msg)
 
-        handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
-        handler.start_response("204 NO CONTENT", [])
+        handler.content_type = ("Content-Type", "text/plain; charset=UTF-8")
+        handler.headers = [handler.content_type]
+        handler.enable_cookie()
+        handler.enable_cors()
+
         handler.write_nothing()
 
         return []
@@ -50,14 +68,49 @@ class JSONPSend(BaseTransport):
     direction = 'recv'
 
     def __call__(self, handler, request_method, raw_request_data):
-        messages = self.decode(raw_request_data)
 
-        for msg in messages:
-            self.session.add_message(messages)
+        if request_method == 'OPTIONS':
+            handler.write_options(['OPTIONS', 'POST'])
+            return []
 
-        self.handler.content_type = ("Content-Type", "text/html; charset=UTF-8")
-        self.handler.start_response("204 NO CONTENT", [])
-        self.handler.write_nothing()
+
+        qs = urlparse.parse_qs(raw_request_data)
+
+        using_formdata = True
+
+        # Do we have a Payload?
+        try:
+            if qs.has_key('d'):
+                using_formdata = True
+                payload = qs['d']
+            else:
+                using_formdata = False
+                payload = urllib2.unquote(raw_request_data)
+        except Exception as e:
+            handler.do500(message='Payload expected.')
+            return
+
+        # Confirm that this at least looks like a JSON array
+        if not using_formdata:
+            if not ('[' in payload and ']' in payload):
+                handler.do500(message='Payload expected.')
+                return
+
+        try:
+            if using_formdata:
+                messages = self.decode(payload[0])
+            else:
+                messages = self.decode(payload)
+        except InvalidJSON:
+            handler.do500(message='Broken JSON encoding.')
+
+        for message in messages:
+            self.session.add_message(message)
+
+        handler.content_type = ("Content-Type", "text/plain; charset=UTF-8")
+        handler.enable_cookie()
+        handler.enable_nocache()
+        handler.write_text('ok')
 
         return []
 
@@ -74,19 +127,53 @@ class PollingTransport(BaseTransport):
 
     TIMING = 5.0
 
+    def poll(self, handler):
+        """
+        Spin lock the thread until we have a message on the
+        gevent queue.
+        """
+        messages = self.session.get_messages(timeout=self.TIMING)
+        messages = self.encode(messages)
+
+        self.session.unlock()
+
+        handler.start_response("200 OK", [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Connection", "close"),
+            self.content_type,
+        ])
+
+        handler.write_text(self.write_frame(messages))
+
+    def __call__(self, handler, request_method, raw_request_data):
+        """
+        On the first poll, send back the open frame, one
+        subsequent calls actually poll the queue.
+        """
+
+        if request_method == 'OPTIONS':
+            handler.write_options(['OPTIONS', 'POST'])
+            return []
+
+        if self.session.is_new():
+            handler.enable_cookie()
+            handler.enable_cors()
+            handler.write_js(protocol.OPEN)
+            return []
+        elif self.session.is_expired():
+            close_error = protocol.close_frame(3000, "Go away!")
+            handler.write_text(close_error)
+            return []
+        elif self.session.is_locked():
+            lock_error = protocol.close_frame(2010, "Another connection still open")
+            handler.write_text(lock_error)
+            return []
+        else:
+            self.session.lock()
+            return [gevent.spawn(self.poll, handler)]
+
     def write_frame(self, frame, data):
         raise NotImplemented()
-
-    def options(self):
-        self.start_response("200 OK", [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Allow-Credentials", "true"),
-            ("Access-Control-Allow-Methods", "POST, GET, OPTIONS"),
-            ("Access-Control-Max-Age", 3600),
-            ("Connection", "close"),
-            ("Content-Length", 0)
-        ])
-        self.handler.write_text('')
 
 # Polling Transports
 # ==================
@@ -100,35 +187,38 @@ class XHRPolling(PollingTransport):
     TIMING = 2
     content_type = ("Content-Type", "text/html; charset=UTF-8")
 
-    def poll(self, handler):
-        """
-        Spin lock the thread until we have a message on the
-        gevent queue.
-        """
+    def write_frame(self, data):
+        return protocol.message_frame(data) + '\n'
 
-        try:
-            messages = self.session.get_messages(timeout=self.TIMING)
-            messages = self.encode(messages)
-        except Empty:
-            messages = "[]"
+class JSONPolling(PollingTransport):
+    direction = 'recv'
 
-        self.session.unlock()
+    content_type = ("Content-Type", "text/plain; charset=UTF-8")
 
-        handler.start_response("200 OK", [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Connection", "close"),
-            self.content_type,
-        ])
-
-        handler.write_text(protocol.message_frame(messages))
+    def write_frame(self, data):
+        frame = protocol.json.dumps(protocol.message_frame(data))
+        return """%s(%s);\r\n""" % ( self.callback, frame)
 
     def __call__(self, handler, request_method, raw_request_data):
-        """
-        On the first poll, send back the open frame, one
-        subsequent calls actually poll the queue.
-        """
+
+        try:
+            callback_param = handler.environ.get("QUERY_STRING").split('=')[1]
+            self.callback = urllib2.unquote(callback_param)
+        except IndexError:
+            handler.do500(message='"callback" parameter required')
+            return
+
+        if request_method == 'OPTIONS':
+            handler.write_options(['OPTIONS', 'POST'])
+            return []
+
         if self.session.is_new():
-            handler.write_text(protocol.OPEN)
+            handler.enable_nocache()
+            handler.enable_cookie()
+            handler.enable_cors()
+            open_frame = '%s("o");\r\n' % self.callback
+
+            handler.write_js(open_frame)
             return []
         elif self.session.is_expired():
             close_error = protocol.close_frame(3000, "Go away!")
@@ -146,6 +236,7 @@ class XHRStreaming(PollingTransport):
     direction = 'recv'
 
     TIMING = 2
+    CUTOFF = 10240
 
     def poll(self, handler):
         """
@@ -153,19 +244,26 @@ class XHRStreaming(PollingTransport):
         gevent queue.
         """
 
+        writer = handler.socket.makefile()
+        written = 0
+
         while True:
-            try:
-                messages = self.session.get_messages(timeout=self.TIMING)
-                messages = self.encode(messages)
-            except Empty:
-                messages = "[]"
+            messages = self.session.get_messages(timeout=self.TIMING)
+            messages = self.encode(messages)
 
-            handler.result.append(protocol.message_frame(messages))
-            handler.write(protocol.message_frame(messages))
+            frame = protocol.message_frame(messages) + '\n'
+            chunk = handler.raw_chunk(frame)
 
-            if handler.response_length > 1024:
-                handler.time_finish = time.time()
-                handler.log_request()
+            writer.write(chunk)
+            writer.flush()
+            written += len(chunk)
+
+            zero_chunk = handler.raw_chunk('')
+            writer.write(zero_chunk)
+
+            if written > self.CUTOFF:
+                zero_chunk = handler.raw_chunk('')
+                writer.write(zero_chunk)
                 break
 
     def stream(self, handler):
@@ -217,11 +315,11 @@ class XHRStreaming(PollingTransport):
             writer.flush()
             #print open_chunk
 
-            zero_chunk = handler.raw_chunk('')
-            writer.write(zero_chunk)
+            #zero_chunk = handler.raw_chunk('')
+            #writer.write(zero_chunk)
             # Peer will close as a result
 
-            writer.flush()
+            #writer.flush()
             #print zero_chunk
 
         except socket.error:
@@ -233,10 +331,8 @@ class XHRStreaming(PollingTransport):
         """
         return [
             gevent.spawn(self.stream, handler),
+            gevent.spawn(self.poll, handler),
         ]
-
-class JSONPolling(PollingTransport):
-    direction = 'recv'
 
 class HTMLFile(BaseTransport):
     direction = 'recv'
@@ -260,7 +356,7 @@ class WebSocket(BaseTransport):
             messages = self.session.get_messages()
             messages = self.encode(messages)
 
-            socket.send(protocol.message_frame(messages))
+            socket.send(protocol.message_frame(messages) + '\n')
 
         close_error = protocol.close_frame(3000, "Go away!")
         socket.send(close_error)

@@ -1,4 +1,6 @@
 import hashlib
+from errors import *
+from simplejson.decoder import JSONDecodeError
 
 # -----------
 # Serializer
@@ -81,7 +83,7 @@ def encode(message):
         # Don't both calling json, since its simple
         msg = '["' + message + '"]'
     elif isinstance(message, (object, dict, list)):
-        msg = json.dumps(message)
+        msg = json.dumps(message, separators=(',',':'))
     else:
         raise ValueError("Unable to serialize: %s", str(message))
 
@@ -92,13 +94,13 @@ def decode(data):
     JSON to Python
     """
     messages = []
-    data.encode('utf-8', 'replace')
+    data = data.decode('utf-8')
 
     # "a['123', 'abc']" -> [123, 'abc']
     try:
         messages = json.loads(data)
-    except:
-        raise ValueError("Unable to deserialize: %s", str(data))
+    except JSONDecodeError:
+        raise InvalidJSON()
 
     return messages
 
@@ -111,7 +113,7 @@ def message_frame(data):
     assert '[' in data
     assert ']' in data
 
-    return ''.join([MESSAGE, data, '\n'])
+    return ''.join([MESSAGE, data])
 
 def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)

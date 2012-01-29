@@ -1,5 +1,5 @@
 import urlparse
-import httplib
+import httplib_fork as httplib
 from ws4py.client.threadedclient import WebSocketClient
 import Queue
 import logging
@@ -19,6 +19,7 @@ class HttpResponse:
         assert u.fragment == ''
         path = u.path + ('?' + u.query if u.query else '')
         self.conn = conn
+
         if not body:
             if method is 'POST':
                 # The spec says: "Applications SHOULD use this field
@@ -40,9 +41,11 @@ class HttpResponse:
             else:
                 self._async_load()
 
-    def _get_status(self):
+    @property
+    def status(self):
+        if self.res.status == 500 and hasattr(self, 'body'):
+            logging.error(self.body)
         return self.res.status
-    status = property(_get_status)
 
     def __getitem__(self, key):
         return self.headers.get(key.lower())

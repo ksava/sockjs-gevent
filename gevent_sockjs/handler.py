@@ -172,8 +172,17 @@ class SockJSHandler(WSGIHandler):
         return "%x\r\n%s\r\n" % (len(data), data)
 
     def write_text(self, text):
-        self.prep_response()
         self.content_type = ("Content-Type", "text/plain; charset=UTF-8")
+
+        self.headers += [self.content_type]
+        self.start_response("200 OK", self.headers)
+
+        self.result = [text]
+        self.process_result()
+
+    def write_js(self, text):
+        self.content_type = ("Content-Type",
+                "application/javascript; charset=UTF-8")
 
         self.headers += [self.content_type]
         self.start_response("200 OK", self.headers)
@@ -214,6 +223,7 @@ class SockJSHandler(WSGIHandler):
         self.start_response("204 NO CONTENT", self.headers)
 
         self.result = [None]
+        self.log_request()
         self.process_result()
 
     def greeting(self):
@@ -242,7 +252,7 @@ class SockJSHandler(WSGIHandler):
         self.time_finish = time.time()
         self.log_request()
 
-    def do500(self, stacktrace=None):
+    def do500(self, stacktrace=None, message=None):
         """
         Handle 500 errors, if we're in an exception context then
         print the stack trace is SockJSServer has trace=True.
@@ -250,7 +260,7 @@ class SockJSHandler(WSGIHandler):
 
         self.prep_response()
 
-        if self.server.trace:
+        if self.server.trace and not message:
             # If we get an explicit stack trace use that,
             # otherwise grab it from the current frame.
 
@@ -268,7 +278,7 @@ class SockJSHandler(WSGIHandler):
             self.headers += [self.content_type]
 
             self.start_response("500 INTERNAL SERVER ERROR", self.headers)
-            self.result = ['500: Interneal Server Error']
+            self.result = [message or '500: Interneal Server Error']
 
         self.process_result()
         self.time_finish = time.time()
@@ -294,8 +304,13 @@ class SockJSHandler(WSGIHandler):
         ]
 
     def enable_cookie(self, cookies=None):
+        if self.environ.get('HTTP_COOKIE'):
+            cookies = [SimpleCookie(self.environ.get('HTTP_COOKIE'))]
+
         if cookies:
             for cookie in cookies:
+                for morsel in cookie.values():
+                    morsel['path'] = '/'
                 k, v = cookie.output().split(':')
                 self.headers += [(k,v)]
         else:
