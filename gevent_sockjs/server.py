@@ -1,6 +1,5 @@
 import session
 from handler import SockJSHandler
-from router import SockJSRouter, SockJSConnection
 from sessionpool import SessionPool
 
 from gevent.pywsgi import WSGIServer
@@ -14,6 +13,19 @@ class SockJSServer(WSGIServer):
     handler_class = SockJSHandler
 
     def __init__(self, *args, **kwargs):
+        """
+        Initialize the SockJS server
+
+        Options:
+            listener    : ( address, port )
+            application : The SockJS router instance
+            trace       : Show stack traces on 500 status code
+
+        Example::
+            sockjs = SockJSServer(('',8081), router)
+            sockjs.serve_forever()
+
+        """
         self.trace = kwargs.pop('trace', False)
 
         super(SockJSServer, self).__init__(*args, **kwargs)
@@ -23,20 +35,14 @@ class SockJSServer(WSGIServer):
         # hack to get the server inside the router
         self.application.server = self
 
-    def kill(self):
-        super(SockJSServer, self).kill()
-        self.session_pool.shudown()
-
     def del_session(self, uid):
         del self.sessions[uid]
 
     def get_session(self, session_id='', create_if_null=False):
         """
-        Return an existing or new client Session.
+        Return an existing or initialize a new session with the
+        session id passed.
         """
-
-        # TODO: assert session_id has sufficent entropy
-        #assert len(session_id) > 3
 
         # Is it an existing session?
         session = self.session_pool.get(session_id)
@@ -50,3 +56,11 @@ class SockJSServer(WSGIServer):
             session.incr_hits()
 
         return session
+
+    def kill(self):
+        """
+        Shutdown the server, block to inform the sessions that
+        they are closing.
+        """
+        self.session_pool.shudown()
+        super(SockJSServer, self).kill()

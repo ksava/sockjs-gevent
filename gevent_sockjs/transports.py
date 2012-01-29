@@ -1,4 +1,3 @@
-import time
 import socket
 import gevent
 import urllib2
@@ -14,9 +13,15 @@ class BaseTransport(object):
         self.conn = conn
 
     def encode(self, data):
+        """
+        Wrapper around the protocol's frame encoding.
+        """
         return protocol.encode(data)
 
     def decode(self, data):
+        """
+        Wrapper around the protocol's frame decoding.
+        """
         return protocol.decode(data)
 
     def __call__(self, handler, request_method, raw_request_data):
@@ -238,6 +243,8 @@ class XHRStreaming(PollingTransport):
     TIMING = 2
     CUTOFF = 10240
 
+    prelude = 'h' *  2048 + '\n'
+
     def poll(self, handler):
         """
         Spin lock the thread until we have a message on the
@@ -247,29 +254,31 @@ class XHRStreaming(PollingTransport):
         writer = handler.socket.makefile()
         written = 0
 
-        while True:
-            messages = self.session.get_messages(timeout=self.TIMING)
-            messages = self.encode(messages)
+        try:
+            while True:
+                messages = self.session.get_messages(timeout=self.TIMING)
+                messages = self.encode(messages)
 
-            frame = protocol.message_frame(messages) + '\n'
-            chunk = handler.raw_chunk(frame)
+                frame = protocol.message_frame(messages) + '\n'
+                chunk = handler.raw_chunk(frame)
 
-            writer.write(chunk)
-            writer.flush()
-            written += len(chunk)
+                writer.write(chunk)
+                writer.flush()
+                written += len(chunk)
 
-            zero_chunk = handler.raw_chunk('')
-            writer.write(zero_chunk)
-
-            if written > self.CUTOFF:
                 zero_chunk = handler.raw_chunk('')
                 writer.write(zero_chunk)
-                break
+
+                if written > self.CUTOFF:
+                    zero_chunk = handler.raw_chunk('')
+                    writer.write(zero_chunk)
+                    break
+
+        except socket.error:
+            self.session.expire()
 
     def stream(self, handler):
         content_type = ("Content-Type", "application/javascript; charset=UTF-8")
-
-        prelude = 'h' *  2048 + '\n'
 
         handler.enable_cookie()
         handler.enable_cors()
@@ -301,29 +310,17 @@ class XHRStreaming(PollingTransport):
             writer = handler.socket.makefile()
             writer.write(headers)
             writer.flush()
-            #print headers
 
-            prelude_chunk = handler.raw_chunk(prelude)
-
-            writer.write(handler.raw_chunk(prelude))
-            writer.flush()
-            #print prelude_chunk
-
+            prelude_chunk = handler.raw_chunk(self.prelude)
             open_chunk = handler.raw_chunk('o\n')
 
+            writer.write(prelude_chunk)
             writer.write(open_chunk)
+
             writer.flush()
-            #print open_chunk
-
-            #zero_chunk = handler.raw_chunk('')
-            #writer.write(zero_chunk)
-            # Peer will close as a result
-
-            #writer.flush()
-            #print zero_chunk
+            writer.close()
 
         except socket.error:
-            handler.socket.shutdown(1)
             self.session.expire()
 
     def __call__(self, handler, request_method, raw_request_data):
@@ -392,7 +389,6 @@ class WebSocket(BaseTransport):
             #socket.close()
             #return []
 
-        # Otherwise spin our threads.
         self.session.lock()
         return [
             gevent.spawn(self.poll, socket),
