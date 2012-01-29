@@ -363,8 +363,14 @@ class WebSocket(BaseTransport):
 
     def put(self, socket):
 
-        while not self.session.expired:
-            messages = socket.receive()
+        while not self.session.is_expired():
+            messages = socket.receive() # blocking
+
+            try:
+                messages = protocol.decode(messages)
+            except InvalidJSON:
+                socket.send('Broken JSON encoding.')
+                continue
 
             for msg in messages:
                 self.session.add_message(msg)
@@ -390,6 +396,44 @@ class WebSocket(BaseTransport):
             #return []
 
         self.session.lock()
+        return [
+            gevent.spawn(self.poll, socket),
+            gevent.spawn(self.put, socket),
+        ]
+
+class RawWebSocket(BaseTransport):
+    direction = 'bi'
+
+    def poll(self, socket):
+        """
+        Spin lock the thread until we have a message on the
+        gevent queue.
+        """
+
+        while not self.session.expired:
+            messages = self.session.get_messages()
+
+            socket.send(messages + '\uffff')
+
+        socket.close()
+
+    def put(self, socket):
+
+        while not self.session.is_expired():
+            # Just read atomic strings and do what the connection
+            # wants.
+
+            message = socket.receive() # blocking
+            self.session.add_message(message)
+
+            self.session.incr_hits()
+
+    def __call__(self, socket, request_method, raw_request_data):
+
+        if self.session.is_expired():
+            socket.close()
+            return []
+
         return [
             gevent.spawn(self.poll, socket),
             gevent.spawn(self.put, socket),

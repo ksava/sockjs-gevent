@@ -1,3 +1,4 @@
+import uuid
 import sys
 import re
 import datetime
@@ -34,6 +35,11 @@ class SockJSHandler(WSGIHandler):
     STATIC_FORMAT = re.compile(r"""
         ^/(?P<route>[^/]+)(/)?     # sockjs route, alphanumeric not empty
         (?P<suffix>[^/]+)?$        # url suffix ( Example: / , info, iframe.html )
+    """, re.X)
+
+    RAW_FORMAT = re.compile(r"""
+        ^/(?P<route>[^/]+)/     # sockjs route, alphanumeric not empty
+        websocket$            # url suffix ( Example: / , info, iframe.html )
     """, re.X)
 
     def prep_response(self):
@@ -242,7 +248,7 @@ class SockJSHandler(WSGIHandler):
             ('access-control-max-age', int(s)),
         ]
 
-    def handle_websocket(self, tokens):
+    def handle_websocket(self, tokens, raw=False):
         handle = WSHandler(
             self.socket,
             self.client_address,
@@ -250,6 +256,8 @@ class SockJSHandler(WSGIHandler):
             self.rfile,
         )
         handle.tokens = tokens
+        handle.raw    = raw
+
         handle.__dict__.update(self.__dict__)
 
         return handle.handle_one_response()
@@ -266,20 +274,32 @@ class SockJSHandler(WSGIHandler):
 
         static_url = self.STATIC_FORMAT.match(path)
         dynamic_url = self.DYNAMIC_FORMAT.match(path)
+        raw_url = self.RAW_FORMAT.match(path)
 
-        if static_url:
+        # The degenerate raw websocket endpoint
+        if raw_url:
+            tokens = raw_url.groupdict()
+
+            tokens['transport'] = 'rawwebsocket'
+            # An ad-hoc session
+            tokens['session']   = uuid.uuid4()
+
+            return self.handle_websocket(tokens, raw=True)
+
+        elif static_url:
             tokens = static_url.groupdict()
 
             route       = tokens['route']
             suffix      = tokens['suffix']
 
             try:
-                handler = self.router.route_static(route, suffix)
+                static_serve = self.router.route_static(route, suffix)
                 raw_request_data = self.wsgi_input.readline()
                 self.wsgi_input._discard()
 
                 self.prep_response()
-                handler(self, meth, raw_request_data)
+                static_serve(self, meth, raw_request_data)
+
             except Http404 as e:
                 return self.do404(e.message)
             except Http500 as e:
@@ -422,10 +442,12 @@ class WSHandler(WebSocketHandler):
         websocket = environ.get('wsgi.websocket')
         meth = environ.get("REQUEST_METHOD")
 
+        # The only mandatory url token
         route       = self.tokens['route']
-        session_uid = self.tokens['session_id']
-        server      = self.tokens['server_id']
-        transport   = self.tokens['transport']
+
+        session_uid = self.tokens.get('session_id', None)
+        server      = self.tokens.get('server_id',  None)
+        transport   = self.tokens.get('transport',  None)
 
         # We're no longer dealing with HTTP so throw away
         # anything we received.
@@ -437,6 +459,7 @@ class WSHandler(WebSocketHandler):
             server,
             transport
         )
+        #downlink.raw = self.raw
 
         threads = downlink(websocket, None, None)
 
