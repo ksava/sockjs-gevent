@@ -53,11 +53,11 @@ Test Status:
     test_entropy (tests.InfoTest) ... ok
     test_options (tests.InfoTest) ... ok
     test_xhr_server_decodes (tests.JSONEncoding) ... ok
-    test_xhr_server_encodes (tests.JSONEncoding) ... FAIL
+    test_xhr_server_encodes (tests.JSONEncoding) ... ok
     test_content_types (tests.JsonPolling) ... FAIL
-    test_invalid_json (tests.JsonPolling) ... FAIL
-    test_no_callback (tests.JsonPolling) ... FAIL
-    test_transport (tests.JsonPolling) ... FAIL
+    test_invalid_json (tests.JsonPolling) ... ok
+    test_no_callback (tests.JsonPolling) ... ok
+    test_transport (tests.JsonPolling) ... ok
     test_closeSession (tests.Protocol) ... ok
     test_simpleSession (tests.Protocol) ... ok
     test_close (tests.RawWebsocket) ... ERROR
@@ -87,7 +87,7 @@ Test Status:
     test_transport (tests.XhrPolling) ... ok
     test_options (tests.XhrStreaming) ... ok
     test_response_limit (tests.XhrStreaming) ... FAIL
-    test_transport (tests.XhrStreaming) ... FAIL
+    test_transport (tests.XhrStreaming) ... ok
 
 Test Coverage
 =============
