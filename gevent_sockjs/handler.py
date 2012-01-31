@@ -229,10 +229,8 @@ class SockJSHandler(WSGIHandler):
             for cookie in cookies:
                 for morsel in cookie.values():
                     morsel['path'] = '/'
-                try:
+                    # TODO: fixme
                     k, v = cookie.output().split(':')[0:2]
-                except:
-                    import pdb; pdb.set_trace()
                 self.headers += [(k,v)]
         else:
             cookie = SimpleCookie()
@@ -471,6 +469,5 @@ class WSHandler(WebSocketHandler):
         # level, this ensures that if this thread is forcefully
         # terminated the transports actions will subsequently
         # die.
-        print 'joining'
         gevent.joinall(threads)
 

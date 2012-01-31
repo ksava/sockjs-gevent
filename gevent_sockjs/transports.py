@@ -26,6 +26,15 @@ class BaseTransport(object):
         """
         return protocol.decode(data)
 
+    def write_frame(self, data):
+        """
+        Write the data in a frame specifically for this
+        transport. Deals with the edge cases of formatting the
+        messages for the transports. Things like \n characters
+        and Javascript callback frames.
+        """
+        raise NotImplemented()
+
     def __call__(self, handler, request_method, raw_request_data):
         """
         Downlink function, action taken as a result of the
@@ -111,8 +120,8 @@ class JSONPSend(BaseTransport):
         except InvalidJSON:
             handler.do500(message='Broken JSON encoding.')
 
-        for message in messages:
-            self.session.add_message(message)
+        for msg in messages:
+            self.conn.on_message(msg)
 
         handler.content_type = ("Content-Type", "text/plain; charset=UTF-8")
         handler.enable_cookie()
@@ -179,7 +188,7 @@ class PollingTransport(BaseTransport):
             self.session.lock()
             return [gevent.spawn(self.poll, handler)]
 
-    def write_frame(self, frame, data):
+    def write_frame(self, data):
         raise NotImplemented()
 
 # Polling Transports
@@ -381,7 +390,7 @@ class WebSocket(BaseTransport):
                 continue
 
             for msg in messages:
-                self.session.add_message(msg)
+                self.conn.on_message(msg)
 
             self.session.incr_hits()
 
