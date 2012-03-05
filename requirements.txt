@@ -1,3 +1,2 @@
 gevent==0.13.6
-# gevent-websocket 0.3.0-dev, has a ton of fixes
-https://bitbucket.org/Jeffrey/gevent-websocket/get/b3c0cd806af0.zip
+gevent-websocket==0.3.0
