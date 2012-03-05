@@ -2,11 +2,12 @@ import socket
 import gevent
 import urllib2
 import urlparse
+from socket import error as socketerror
 
 import protocol
 from errors import *
 
-from geventwebsocket.websocket import Closed
+from geventwebsocket.websocket import Closed, WebSocketError
 
 class BaseTransport(object):
 
@@ -310,7 +311,7 @@ class XHRStreaming(PollingTransport):
                 ('Connection', 'close'),
             ]
 
-        # Use very low level api here, since we want mor granulra
+        # Use very low level api here, since we want more granular
         # control over our response
 
         handler.start_response("200 OK", handler.headers)
@@ -364,18 +365,40 @@ class WebSocket(BaseTransport):
             messages = self.session.get_messages()
             messages = self.encode(messages)
 
-            socket.send(protocol.message_frame(messages) + '\n')
+            socket.send(protocol.message_frame(messages))
 
-        close_error = protocol.close_frame(3000, "Go away!")
+        close_error = protocol.close_frame(3000, "Go away!", newline=False)
         socket.send(close_error)
 
         # Session expires, so unlock
+        socket.close()
         self.session.unlock()
 
     def put(self, socket):
 
+        wsprotocol = socket.protocol
+
         while not self.session.is_expired():
-            messages = socket.receive() # blocking
+            try:
+                messages = socket.receive() # blocking
+            # geventwebsocket doesn't wrap these failure modes
+            # into nice exceptions so we have to catch base Python
+            # Exceptions. :(
+
+            # Ignore invalid frames
+            except ValueError:
+                continue
+            except TypeError:
+                continue
+            # Ignore empty frames
+            except WebSocketError:
+                continue
+            # If the peer closes early then a fobj.read attribute
+            # won't exist so ignore.
+            except AttributeError:
+                break
+            #except socketerror:
+                #break
 
             # Hybi = Closed
             # Hixie = None
@@ -386,8 +409,9 @@ class WebSocket(BaseTransport):
             try:
                 messages = protocol.decode(messages)
             except InvalidJSON:
-                socket.send('Broken JSON encoding.')
-                continue
+                # When user sends broken data - broken JSON for example, the
+                # server must terminate the ws connection.
+                break
 
             for msg in messages:
                 self.conn.on_message(msg)
@@ -395,7 +419,6 @@ class WebSocket(BaseTransport):
             self.session.incr_hits()
 
         # Session expires, so unlock
-
         socket.close()
         self.session.unlock()
         self.session.expire()
@@ -405,7 +428,7 @@ class WebSocket(BaseTransport):
         socket.send('o')
 
         if self.session.is_expired():
-            close_error = protocol.close_frame(3000, "Go away!")
+            close_error = protocol.close_frame(3000, "Go away!", newline=False)
             socket.send(close_error)
             socket.close()
             return []
@@ -416,6 +439,7 @@ class WebSocket(BaseTransport):
             #return []
 
         self.session.lock()
+
         return [
             gevent.spawn(self.poll, socket),
             gevent.spawn(self.put, socket),

@@ -104,8 +104,11 @@ def decode(data):
 
     return messages
 
-def close_frame(code, reason):
-    return '%s[%d,"%s"]\n' % (CLOSE, code, reason)
+def close_frame(code, reason, newline=True):
+    if newline:
+        return '%s[%d,"%s"]\n' % (CLOSE, code, reason)
+    else:
+        return '%s[%d,"%s"]' % (CLOSE, code, reason)
 
 
 def message_frame(data):
