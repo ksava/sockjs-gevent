@@ -66,10 +66,10 @@ Test Status:
     test_invalidPaths (tests.SessionURLs) ... ok
     test_broken_json (tests.WebsocketHixie76) ... FAIL
     test_close (tests.WebsocketHixie76) ... ok
-    test_empty_frame (tests.WebsocketHixie76) ... FAIL
+    test_empty_frame (tests.WebsocketHixie76) ... ok
     test_headersSanity (tests.WebsocketHixie76) ... ok
     test_reuseSessionId (tests.WebsocketHixie76) ... FAIL
-    test_transport (tests.WebsocketHixie76) ... ERROR
+    test_transport (tests.WebsocketHixie76) ... ok
     test_httpMethod (tests.WebsocketHttpErrors) ... ok
     test_invalidConnectionHeader (tests.WebsocketHttpErrors) ...  ok
     test_invalidMethod (tests.WebsocketHttpErrors) ... ok
