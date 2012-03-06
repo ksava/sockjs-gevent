@@ -466,7 +466,13 @@ class RawWebSocket(BaseTransport):
             messages = self.session.get_messages()
 
             for message in messages:
-                socket.send(message)
+                # TODO: this is a hack because the rest of the
+                # transports actually use framing and this is the
+                # one abberation. But it works...
+                if len(message) == 1:
+                    socket.send(message[0])
+                else:
+                    socket.send(message)
 
         socket.close()
 
