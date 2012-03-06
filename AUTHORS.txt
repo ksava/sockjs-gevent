@@ -2,7 +2,7 @@ Authors
 =======
 
 Stephen Diehl
-Nikolay Kim
+John Debs
 
 Thanks To
 =========
