@@ -102,7 +102,9 @@ class JSONPSend(BaseTransport):
                 payload = qs['d']
             else:
                 using_formdata = False
-                payload = urllib2.unquote(raw_request_data)
+                payload = raw_request_data
+
+        # todo: more granular exception catching
         except Exception as e:
             handler.do500(message='Payload expected.')
             return
@@ -338,6 +340,10 @@ class XHRStreaming(PollingTransport):
     def __call__(self, handler, request_method, raw_request_data):
         """
         """
+        if request_method == 'OPTIONS':
+            handler.write_options(['OPTIONS', 'POST'])
+            return []
+
         return [
             gevent.spawn(self.stream, handler),
             gevent.spawn(self.poll, handler),
@@ -351,6 +357,12 @@ class IFrame(BaseTransport):
 
 class EventSource(BaseTransport):
     direction = 'send'
+
+# Socket Transports
+# ==================
+#
+# Provides a bidirectional connection to and from the client.
+# Sending and receiving are split in two different threads.
 
 class WebSocket(BaseTransport):
     direction = 'bi'
