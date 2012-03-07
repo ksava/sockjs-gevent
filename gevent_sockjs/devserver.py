@@ -1,4 +1,18 @@
+"""
+This module is most like what a user would define in their
+application, namely the
+
+    - Routes
+    - Connection Handlers
+
+The one's sketched here are the Echo, Disabled Websockets, and
+the Close connection handlers which are used by the protocol test
+suite.
+"""
+
 import gevent.monkey
+
+# Moneky patching stdlib is not a neccesity for all use cases
 gevent.monkey.patch_all()
 
 from server import SockJSServer

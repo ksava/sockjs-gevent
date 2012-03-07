@@ -23,6 +23,15 @@ class Session(object):
         self.forever = False
         self.session_id = self.generate_uid()
 
+        # Whether this was closed explictly by client vs
+        # internally by garbage collection.
+        self.interrupted = False
+
+        # When a polling request is closed by a network error - not by
+        # server, the session should be automatically closed. When there
+        # is a network error - we're in an undefined state. Some messages
+        # may have been lost, there is not much we can do about it.
+        self.network_error = False
 
         # Async event, use rawlink to string callbacks
         self.timeout = Event()
@@ -57,6 +66,10 @@ class Session(object):
     def post_delete(self):
         pass
 
+    def kill(self):
+        self.killed = True
+        self.expire()
+
     def expire(self):
         """
         Manually expire a session.
@@ -81,14 +94,17 @@ class Session(object):
     def get_messages(self, **kwargs):
         raise NotImplemented()
 
-    def kill(self):
-        raise NotImplemented()
-
     def is_locked(self):
         return self.locked.is_set()
 
+    def is_network_error(self):
+        return self.network_error
+
     def is_expired(self):
         return self.expired
+
+    def is_interrupted(self):
+        return self.interrupted
 
     def lock(self):
         self.locked.set()
@@ -136,6 +152,15 @@ class MemorySession(Session):
                     accum.append(self.queue.get_nowait())
             finally:
                 return accum
+
+    def interrupt(self):
+        """
+        A kill event trigged through a client accessible endpoint
+
+        Internal expires will not have is_interupted() == True
+        """
+        self.interrupted = True
+        self.kill()
 
     def kill(self):
         self.connected = False

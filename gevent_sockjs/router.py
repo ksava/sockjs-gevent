@@ -103,7 +103,7 @@ class SockJSConnection(object):
 
     def close(self):
         if self.session:
-            self.session.kill()
+            self.session.interrupt()
         else:
             raise Exception("Tried to close closed session")
 

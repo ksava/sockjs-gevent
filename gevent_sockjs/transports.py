@@ -179,12 +179,20 @@ class PollingTransport(BaseTransport):
             handler.enable_cors()
             handler.write_js(protocol.OPEN)
             return []
+
+        elif self.session.is_network_error():
+            interrupt_error = protocol.close_frame(1002, "Connection interrupted")
+            handler.write_text(interrupt_error)
+            return []
+
         elif self.session.is_expired():
             close_error = protocol.close_frame(3000, "Go away!")
             handler.write_text(close_error)
             return []
+
         elif self.session.is_locked():
             lock_error = protocol.close_frame(2010, "Another connection still open")
+            self.session.network_error = True
             handler.write_text(lock_error)
             return []
         else:
